@@ -8,17 +8,10 @@
 name: 🦆 MotherDuck Sync
 
 on:
-  # ┌─────────────────────────────────────────────────────────────────────────────┐
-  # │ Scheduled Syncs - 3x Daily                                                  │
-  # └─────────────────────────────────────────────────────────────────────────────┘
   schedule:
-    - cron: '0 3 * * *'    # 🌅 Morning   - 3:00 AM UTC
-    - cron: '0 11 * * *'   # ☀️  Midday    - 11:00 AM UTC
-    - cron: '0 19 * * *'   # 🌙 Evening   - 7:00 PM UTC
-
-  # ┌─────────────────────────────────────────────────────────────────────────────┐
-  # │ Push Triggers                                                               │
-  # └─────────────────────────────────────────────────────────────────────────────┘
+    - cron: '0 3 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 19 * * *'
   push:
     branches: [main]
     paths:
@@ -26,123 +19,71 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/sync.yml'
-
-  # ┌─────────────────────────────────────────────────────────────────────────────┐
-  # │ Manual Trigger                                                              │
-  # └─────────────────────────────────────────────────────────────────────────────┘
   workflow_dispatch:
     inputs:
       full_sync:
-        description: '🔄 Full sync (resync all records)'
+        description: 'Full sync (resync all records)'
         type: boolean
         default: false
       skip_tests:
-        description: '⏭️ Skip tests (faster sync)'
+        description: 'Skip tests (faster sync)'
         type: boolean
         default: false
 
-# ┌─────────────────────────────────────────────────────────────────────────────────┐
-# │ Concurrency - Cancel outdated runs                                              │
-# └─────────────────────────────────────────────────────────────────────────────────┘
 concurrency:
   group: motherduck-sync-${{ github.ref }}
   cancel-in-progress: true
 
-# ┌─────────────────────────────────────────────────────────────────────────────────┐
-# │ Environment                                                                     │
-# └─────────────────────────────────────────────────────────────────────────────────┘
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  RUST_LOG: info
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════════════════════
-  # 🔐 PREFLIGHT - Validate secrets and environment
-  # ═══════════════════════════════════════════════════════════════════════════════
   preflight:
     name: 🔐 Preflight
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
       secrets_valid: ${{ steps.check.outputs.valid }}
+      is_scheduled: ${{ steps.check.outputs.is_scheduled }}
     steps:
-      - name: Validate required secrets
+      - name: Validate secrets
         id: check
         run: |
-          echo "::group::🔍 Checking required secrets..."
-          
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "is_scheduled=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_scheduled=false" >> $GITHUB_OUTPUT
+          fi
           MISSING=""
-          
           if [ -z "${{ secrets.DATABASE_URL }}" ]; then
-            echo "::error::❌ DATABASE_URL secret is missing"
             MISSING="${MISSING}DATABASE_URL "
-          else
-            echo "✅ DATABASE_URL is set"
           fi
-          
           if [ -z "${{ secrets.MOTHERDUCK_TOKEN }}" ]; then
-            echo "::error::❌ MOTHERDUCK_TOKEN secret is missing"
             MISSING="${MISSING}MOTHERDUCK_TOKEN "
-          else
-            echo "✅ MOTHERDUCK_TOKEN is set"
           fi
-          
           if [ -z "${{ secrets.SYNC_TABLES_CONFIG }}" ]; then
-            echo "::error::❌ SYNC_TABLES_CONFIG secret is missing"
             MISSING="${MISSING}SYNC_TABLES_CONFIG "
-          else
-            echo "✅ SYNC_TABLES_CONFIG is set"
           fi
-          
-          echo "::endgroup::"
-          
           if [ -n "$MISSING" ]; then
             echo "::error::Missing secrets: $MISSING"
             echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          
           echo "valid=true" >> $GITHUB_OUTPUT
-          echo "✅ All secrets validated"
 
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🔐 Preflight Check" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.check.outputs.valid }}" = "true" ]; then
-            echo "| Secret | Status |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
-            echo "| DATABASE_URL | ✅ |" >> $GITHUB_STEP_SUMMARY
-            echo "| MOTHERDUCK_TOKEN | ✅ |" >> $GITHUB_STEP_SUMMARY
-            echo "| SYNC_TABLES_CONFIG | ✅ |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Secret validation failed**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Please ensure all required secrets are configured in repository settings." >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # ═══════════════════════════════════════════════════════════════════════════════
-  # 🧪 TEST - Code quality and unit tests
-  # ═══════════════════════════════════════════════════════════════════════════════
   test:
     name: 🧪 Test
     needs: [preflight]
-    if: ${{ inputs.skip_tests != true }}
+    if: inputs.skip_tests != true && needs.preflight.outputs.is_scheduled != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -152,44 +93,22 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-
-      - name: 📝 Check formatting
+      - name: Format
         run: cargo fmt --check
-
-      - name: 🔍 Clippy lints
+      - name: Clippy
         run: cargo clippy --all-features -- -W clippy::all
-
-      - name: 🧪 Run tests
+      - name: Tests
         run: cargo test --all-features
 
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Formatting | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Clippy | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
-
-  # ═══════════════════════════════════════════════════════════════════════════════
-  # 🔨 BUILD - Compile release binary
-  # ═══════════════════════════════════════════════════════════════════════════════
   build:
     name: 🔨 Build
     needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -199,20 +118,14 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-
-      - name: 🔨 Build release
+      - name: Build
         run: cargo build --release
-
-      - name: 📦 Upload binary
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
           path: target/release/motherduck-sync
           retention-days: 7
 
-  # ═══════════════════════════════════════════════════════════════════════════════
-  # 🚀 SYNC - Execute data synchronization
-  # ═══════════════════════════════════════════════════════════════════════════════
   sync:
     name: 🚀 Sync
     needs: [preflight, build, test]
@@ -228,103 +141,33 @@ jobs:
       MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
       SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
     steps:
-      - name: 📥 Download binary
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
-
-      - name: 🔧 Setup binary
+      - name: Setup
         run: chmod +x motherduck-sync
-
-      - name: 🔌 Test connectivity
-        id: connectivity
+      - name: Test connectivity
+        run: ./motherduck-sync test
+      - name: Refresh staging
         run: |
-          echo "::group::Testing database connections..."
-          ./motherduck-sync test
-          echo "::endgroup::"
-
-      - name: 🔄 Refresh staging tables
-        id: refresh
-        run: |
-          echo "::group::Refreshing analytics staging tables..."
           sudo apt-get update && sudo apt-get install -y postgresql-client -qq
-          psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();" 2>&1
-          echo "::endgroup::"
-
-      - name: 🦆 Sync to MotherDuck
-        id: sync
+          psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();"
+      - name: Sync
         run: |
-          echo "::group::Syncing data to MotherDuck..."
-          
           ARGS="sync"
           if [ "${{ inputs.full_sync }}" = "true" ]; then
             ARGS="$ARGS --full"
-            echo "📊 Mode: Full sync"
-          else
-            echo "📊 Mode: Incremental sync"
           fi
-          
           ./motherduck-sync $ARGS --json | tee sync-result.json
-          
-          echo "::endgroup::"
-
-      - name: 📊 Verify sync
-        id: verify
-        run: |
-          echo "::group::Verifying record counts..."
-          ./motherduck-sync query --counts
-          echo "::endgroup::"
-
-      - name: 📦 Upload results
-        uses: actions/upload-artifact@v4
+      - name: Verify
+        run: ./motherduck-sync query --counts
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sync-result-${{ github.run_id }}
           path: sync-result.json
           retention-days: 30
 
-      - name: 📋 Summary
-        if: always()
-        run: |
-          echo "## 🦆 MotherDuck Sync Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Run:** \`${{ github.run_id }}\` | **Trigger:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Sync mode
-          if [ "${{ inputs.full_sync }}" = "true" ]; then
-            echo "**Mode:** 🔄 Full Sync" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Mode:** ⚡ Incremental Sync" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Results
-          if [ -f sync-result.json ]; then
-            echo "### 📊 Sync Data" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            cat sync-result.json >> $GITHUB_STEP_SUMMARY
-            echo '' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ No sync results file generated" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          # Status
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ Pipeline Status" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔌 Connectivity | ${{ steps.connectivity.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔄 Refresh Staging | ${{ steps.refresh.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🦆 Sync | ${{ steps.sync.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📊 Verify | ${{ steps.verify.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-
-  # ═══════════════════════════════════════════════════════════════════════════════
-  # 📢 NOTIFY - Report final status
-  # ═══════════════════════════════════════════════════════════════════════════════
   notify:
     name: 📢 Notify
     needs: [preflight, test, build, sync]
@@ -332,40 +175,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Determine status
-        id: status
+      - name: Summary
         run: |
-          if [ "${{ needs.sync.result }}" = "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "emoji=✅" >> $GITHUB_OUTPUT
-            echo "message=Sync completed successfully" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.preflight.result }}" = "failure" ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=🔐" >> $GITHUB_OUTPUT
-            echo "message=Preflight failed - check secrets" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.test.result }}" = "failure" ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=🧪" >> $GITHUB_OUTPUT
-            echo "message=Tests failed" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.build.result }}" = "failure" ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=🔨" >> $GITHUB_OUTPUT
-            echo "message=Build failed" >> $GITHUB_OUTPUT
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=❌" >> $GITHUB_OUTPUT
-            echo "message=Sync failed" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Final summary
-        run: |
-          echo "## ${{ steps.status.outputs.emoji }} Pipeline Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ steps.status.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🦆 MotherDuck Sync" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔐 Preflight | ${{ needs.preflight.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🧪 Test | ${{ needs.test.result == 'success' && '✅' || needs.test.result == 'skipped' && '⏭️' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔨 Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🚀 Sync | ${{ needs.sync.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Preflight | ${{ needs.preflight.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sync | ${{ needs.sync.result }} |" >> $GITHUB_STEP_SUMMARY
