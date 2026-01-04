@@ -57,40 +57,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Use psql to refresh staging tables from source views
-          psql "$DATABASE_URL" <<EOF
-          -- Refresh users staging
-          INSERT INTO analytics_staging_users 
-          SELECT id, nickname, email, avatar_url, bio, is_active, is_verified, 
-                 last_seen_at, created_at, updated_at, false
-          FROM analytics_full_users
-          ON CONFLICT (id) DO UPDATE SET
-              nickname = EXCLUDED.nickname,
-              email = EXCLUDED.email,
-              is_active = EXCLUDED.is_active,
-              last_seen_at = EXCLUDED.last_seen_at,
-              updated_at = EXCLUDED.updated_at,
-              synced_to_motherduck = false;
-          
-          -- Refresh listings staging
-          INSERT INTO analytics_staging_listings
-          SELECT id, profile_id, post_name, post_description, post_type, post_address,
-                 latitude, longitude, is_active, is_arranged, post_arranged_to, 
-                 post_arranged_at, post_views, post_like_counter, created_at, updated_at, false
-          FROM analytics_full_listings
-          ON CONFLICT (id) DO UPDATE SET
-              post_name = EXCLUDED.post_name,
-              is_active = EXCLUDED.is_active,
-              is_arranged = EXCLUDED.is_arranged,
-              post_views = EXCLUDED.post_views,
-              updated_at = EXCLUDED.updated_at,
-              synced_to_motherduck = false;
-          EOF
+          # Call stored procedure to refresh staging tables
+          # The procedure is defined in Supabase migrations (private)
+          psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();"
 
       - name: Run sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
         run: |
           ARGS="sync"
           if [ "${{ inputs.full_sync }}" = "true" ]; then

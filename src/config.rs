@@ -531,66 +531,86 @@ fn default_multiplier() -> f64 { 2.0 }
 fn default_log_level() -> String { "info".into() }
 fn default_true() -> bool { true }
 
+/// Compact table config for JSON parsing from environment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableConfig {
+    /// Source table name
+    pub source: String,
+    /// Target table name
+    pub target: String,
+    /// Primary key column(s)
+    pub pk: Vec<String>,
+    /// Columns to sync (empty = all)
+    #[serde(default)]
+    pub columns: Vec<String>,
+    /// Column mappings (source -> target)
+    #[serde(default)]
+    pub mappings: HashMap<String, String>,
+    /// Order by column
+    #[serde(default)]
+    pub order_by: Option<String>,
+    /// Filter clause
+    #[serde(default)]
+    pub filter: Option<String>,
+    /// Enabled (default true)
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl From<TableConfig> for TableMapping {
+    fn from(cfg: TableConfig) -> Self {
+        TableMapping {
+            source_table: cfg.source,
+            target_table: cfg.target,
+            primary_key: cfg.pk,
+            sync_flag_column: default_sync_flag(),
+            columns: cfg.columns,
+            column_mappings: cfg.mappings,
+            filter: cfg.filter,
+            order_by: cfg.order_by,
+            enabled: cfg.enabled,
+        }
+    }
+}
+
+/// Load table mappings from SYNC_TABLES_CONFIG environment variable.
+/// Expects base64-encoded JSON array of TableConfig objects.
+/// Falls back to empty vec if not set (requires config to be provided).
+pub fn tables_from_env() -> Result<Vec<TableMapping>> {
+    let config_str = match std::env::var("SYNC_TABLES_CONFIG") {
+        Ok(encoded) => {
+            // Decode base64
+            use base64::{Engine, engine::general_purpose::STANDARD};
+            let decoded = STANDARD.decode(&encoded)
+                .map_err(|e| Error::config(format!("Failed to decode SYNC_TABLES_CONFIG base64: {}", e)))?;
+            String::from_utf8(decoded)
+                .map_err(|e| Error::config(format!("SYNC_TABLES_CONFIG is not valid UTF-8: {}", e)))?
+        }
+        Err(_) => {
+            // Try plain JSON (for local dev)
+            match std::env::var("SYNC_TABLES_JSON") {
+                Ok(json) => json,
+                Err(_) => return Ok(vec![]), // No config provided
+            }
+        }
+    };
+
+    let configs: Vec<TableConfig> = serde_json::from_str(&config_str)
+        .map_err(|e| Error::config(format!("Failed to parse table config JSON: {}", e)))?;
+
+    Ok(configs.into_iter().map(TableMapping::from).collect())
+}
+
 fn default_tables() -> Vec<TableMapping> {
-    vec![
-        // Raw data tables for analytics queries (using staging tables)
-        TableMapping {
-            source_table: "analytics_staging_users".into(),
-            target_table: "full_users".into(),
-            primary_key: vec!["id".into()],
-            sync_flag_column: default_sync_flag(),
-            columns: vec![],
-            column_mappings: HashMap::new(),
-            filter: None,
-            order_by: Some("created_at".into()),
-            enabled: true,
-        },
-        TableMapping {
-            source_table: "analytics_staging_listings".into(),
-            target_table: "full_listings".into(),
-            primary_key: vec!["id".into()],
-            sync_flag_column: default_sync_flag(),
-            columns: vec![],
-            column_mappings: HashMap::new(),
-            filter: None,
-            order_by: Some("created_at".into()),
-            enabled: true,
-        },
-        // Aggregated analytics tables
-        TableMapping {
-            source_table: "analytics_daily_stats".into(),
-            target_table: "daily_stats".into(),
-            primary_key: vec!["date".into()],
-            sync_flag_column: default_sync_flag(),
-            columns: vec![],
-            column_mappings: HashMap::new(),
-            filter: None,
-            order_by: Some("date".into()),
-            enabled: true,
-        },
-        TableMapping {
-            source_table: "analytics_user_activity".into(),
-            target_table: "user_activity_summary".into(),
-            primary_key: vec!["user_id".into()],
-            sync_flag_column: default_sync_flag(),
-            columns: vec![],
-            column_mappings: HashMap::new(),
-            filter: None,
-            order_by: Some("updated_at".into()),
-            enabled: true,
-        },
-        TableMapping {
-            source_table: "analytics_post_activity".into(),
-            target_table: "post_activity_daily_stats".into(),
-            primary_key: vec!["id".into()],
-            sync_flag_column: default_sync_flag(),
-            columns: vec![],
-            column_mappings: HashMap::new(),
-            filter: None,
-            order_by: Some("date".into()),
-            enabled: true,
-        },
-    ]
+    // Try to load from environment first
+    match tables_from_env() {
+        Ok(tables) if !tables.is_empty() => tables,
+        _ => {
+            // No tables configured - return empty
+            // In production, SYNC_TABLES_CONFIG must be set
+            vec![]
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,16 @@
+[
+  {
+    "source": "staging_users",
+    "target": "full_users",
+    "pk": ["id"],
+    "columns": ["id", "name", "email", "created_at"],
+    "order_by": "created_at"
+  },
+  {
+    "source": "staging_posts",
+    "target": "full_posts",
+    "pk": ["id"],
+    "mappings": {"profile_id": "user_id"},
+    "order_by": "created_at"
+  }
+]

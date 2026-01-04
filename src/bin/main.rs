@@ -71,6 +71,12 @@ enum Commands {
         #[arg(short, long)]
         table: Option<String>,
     },
+    /// Generate base64 secret from tables.local.json
+    GenerateSecret {
+        /// Input JSON file path
+        #[arg(short, long, default_value = "tables.local.json")]
+        input: String,
+    },
 }
 
 #[tokio::main]
@@ -93,6 +99,11 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         return run_init(&output);
     }
 
+    // Handle generate-secret command - doesn't need config
+    if let Some(Commands::GenerateSecret { input }) = cli.command {
+        return run_generate_secret(&input);
+    }
+
     let config = load_config(cli.config.as_deref())?;
 
     match cli.command {
@@ -106,6 +117,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             run_clean(config, reset, truncate, table, cli.json, cli.quiet).await
         }
         Some(Commands::Init { .. }) => unreachable!(), // Handled above
+        Some(Commands::GenerateSecret { .. }) => unreachable!(), // Handled above
     }
 }
 
@@ -449,6 +461,32 @@ async fn run_clean(
     } else if !quiet {
         println!("\n✓ Clean completed");
     }
+
+    Ok(())
+}
+
+fn run_generate_secret(input: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
+    // Read the JSON file
+    let content = std::fs::read_to_string(input)
+        .map_err(|e| format!("Failed to read {}: {}", input, e))?;
+
+    // Validate it's valid JSON
+    let _: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid JSON in {}: {}", input, e))?;
+
+    // Minify and encode
+    let parsed: serde_json::Value = serde_json::from_str(&content)?;
+    let minified = serde_json::to_string(&parsed)?;
+    let encoded = STANDARD.encode(minified.as_bytes());
+
+    println!("=== SYNC_TABLES_CONFIG Secret ===\n");
+    println!("{}\n", encoded);
+    println!("=== Instructions ===");
+    println!("1. Go to GitHub repo → Settings → Secrets → Actions");
+    println!("2. Create/update secret: SYNC_TABLES_CONFIG");
+    println!("3. Paste the value above");
 
     Ok(())
 }

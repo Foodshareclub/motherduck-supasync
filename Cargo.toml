@@ -80,6 +80,9 @@ humantime = "2"
 # Validation
 validator = { version = "0.18", features = ["derive"] }
 
+# Base64 encoding/decoding (for config secrets)
+base64 = "0.22"
+
 # Metrics (optional, for observability)
 metrics = "0.23"
 
