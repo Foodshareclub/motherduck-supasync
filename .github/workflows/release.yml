@@ -112,17 +112,6 @@ jobs:
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: 📝 Set new version output
-        run: |
-          echo "new=${{ steps.calc.outputs.new }}" >> $GITHUB_OUTPUT
-        id: final_version
-
-    outputs:
-      should_release: ${{ steps.check.outputs.should_release }}
-      current_version: ${{ steps.version.outputs.current }}
-      new_version: ${{ steps.calc.outputs.new }}
-      bump_type: ${{ steps.bump.outputs.type }}
-
   release:
     name: 🚀 Release
     needs: check-release
