@@ -10,18 +10,34 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-A missing_docs"
 
-# Cancel in-progress runs for the same branch
+# Cancel in-progress runs immediately
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────
+  # ⚡ Preflight - Cancel stale runs immediately
+  # ─────────────────────────────────────────────────────────────
+  preflight:
+    name: ⚡ Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: 🛑 Cancel stale workflow runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+          all_but_latest: true
+
+  # ─────────────────────────────────────────────────────────────
   # 🎨 Code Quality
   # ─────────────────────────────────────────────────────────────
   format:
     name: 🎨 Format
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -31,7 +47,9 @@ jobs:
 
   lint:
     name: 📎 Lint
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -51,7 +69,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   build:
     name: 🔨 Build
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -72,7 +92,9 @@ jobs:
 
   test:
     name: ✅ Test
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -87,7 +109,9 @@ jobs:
 
   docs:
     name: 📚 Docs
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -100,7 +124,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   security:
     name: 🔐 Security Audit
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -111,7 +137,9 @@ jobs:
 
   secrets-scan:
     name: 🕵️ Secrets Scan
+    needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -164,6 +192,7 @@ jobs:
     name: 📦 Package
     needs: [format, lint, build, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -180,6 +209,7 @@ jobs:
     needs: [package, security, secrets-scan, docs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: crates-io
     steps:
       - uses: actions/checkout@v4
@@ -229,6 +259,7 @@ jobs:
     needs: [format, lint, build, test, docs, security, secrets-scan, package]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: 📊 Pipeline Summary
         run: |
