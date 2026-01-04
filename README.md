@@ -24,15 +24,25 @@ PostgreSQL/Supabase  →  motherduck-sync  →  MotherDuck (DuckDB)
 - **Privacy-first** - Keep schema details in secrets, not in code
 - **CI/CD ready** - GitHub Actions workflow included
 
+## Documentation
+
+📚 **[Full Documentation](./docs/README.md)**
+
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](./docs/getting-started.md) | Installation and first sync |
+| [Configuration](./docs/configuration.md) | All configuration options |
+| [CLI Reference](./docs/cli-reference.md) | Command-line usage |
+| [Database Setup](./docs/database-setup.md) | PostgreSQL and MotherDuck setup |
+| [GitHub Actions](./docs/github-actions.md) | CI/CD automation |
+| [Troubleshooting](./docs/troubleshooting.md) | Common issues and solutions |
+
 ## Table of Contents
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [CLI Commands](#cli-commands)
-- [Table Configuration Reference](#table-configuration-reference)
-- [GitHub Actions](#github-actions)
-- [Database Setup](#database-setup)
 - [Troubleshooting](#troubleshooting)
 
 ## Installation
