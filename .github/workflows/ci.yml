@@ -1,4 +1,4 @@
-name: CI
+name: CI & Publish
 
 on:
   push:
@@ -8,17 +8,20 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-A missing_docs"
 
 jobs:
   test:
+    name: 🧪 Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: 🦀 Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
+      - name: 📦 Cache dependencies
         uses: actions/cache@v4
         with:
           path: |
@@ -28,46 +31,51 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check formatting
+      - name: 🎨 Check formatting
         run: cargo fmt --check
 
-      - name: Clippy
-        env:
-          RUSTFLAGS: "-A missing_docs"
+      - name: 📎 Clippy lints
         run: cargo clippy -- -D warnings
 
-      - name: Build
+      - name: 🔨 Build release
         run: cargo build --release
 
-      - name: Test
+      - name: ✅ Run tests
         run: cargo test
 
-      - name: Doc
+      - name: 📚 Build docs
         run: cargo doc --no-deps
 
-      - name: Verify package
+      - name: 📋 Verify package contents
         run: cargo package --list
 
-      - name: Dry-run publish
+      - name: 🧪 Dry-run publish
         run: cargo publish --dry-run
 
   publish:
+    name: 🚀 Publish to crates.io
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: 🦀 Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish to crates.io
+      - name: 📤 Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
+          echo "🚀 Publishing motherduck-sync to crates.io..."
           cargo publish 2>&1 | tee publish_output.txt
+          
           if grep -q "already uploaded" publish_output.txt; then
-            echo "✓ Version already published"
+            echo "✅ Version already published - skipping"
           elif grep -q "Uploading" publish_output.txt; then
-            echo "✓ Successfully published to crates.io"
+            echo "✅ Successfully published to crates.io!"
+            echo "📦 https://crates.io/crates/motherduck-sync"
+          else
+            echo "⚠️ Publish completed with unknown status"
           fi
