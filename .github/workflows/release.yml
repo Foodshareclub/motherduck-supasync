@@ -42,7 +42,7 @@ jobs:
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       current_version: ${{ steps.version.outputs.current }}
-      new_version: ${{ steps.version.outputs.new }}
+      new_version: ${{ steps.calc.outputs.new }}
       bump_type: ${{ steps.bump.outputs.type }}
     steps:
       - uses: actions/checkout@v4
