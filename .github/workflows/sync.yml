@@ -4,6 +4,13 @@ on:
   schedule:
     # Run daily at 3 AM UTC
     - cron: '0 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/sync.yml'
   workflow_dispatch:
     inputs:
       full_sync:
@@ -14,6 +21,11 @@ on:
         description: 'Refresh staging tables before sync'
         type: boolean
         default: true
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: motherduck-sync
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
