@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use motherduck_sync::{SyncClient, SyncConfig, SyncMode};
 use std::process::ExitCode;
 use tracing::{error, info};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser)]
 #[command(name = "motherduck-sync")]
@@ -110,12 +110,16 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         None | Some(Commands::Sync) => run_sync(config, cli.full, cli.json, cli.quiet).await,
         Some(Commands::Test) => run_test(config, cli.json).await,
         Some(Commands::Status) => run_status(config, cli.json).await,
-        Some(Commands::Query { sql, counts, tables }) => {
-            run_query(config, sql, counts, tables, cli.json).await
-        }
-        Some(Commands::Clean { reset, truncate, table }) => {
-            run_clean(config, reset, truncate, table, cli.json, cli.quiet).await
-        }
+        Some(Commands::Query {
+            sql,
+            counts,
+            tables,
+        }) => run_query(config, sql, counts, tables, cli.json).await,
+        Some(Commands::Clean {
+            reset,
+            truncate,
+            table,
+        }) => run_clean(config, reset, truncate, table, cli.json, cli.quiet).await,
         Some(Commands::Init { .. }) => unreachable!(), // Handled above
         Some(Commands::GenerateSecret { .. }) => unreachable!(), // Handled above
     }
@@ -138,14 +142,17 @@ fn load_config(path: Option<&str>) -> Result<SyncConfig, Box<dyn std::error::Err
     Ok(SyncConfig::from_env()?)
 }
 
-
 async fn run_sync(
     config: SyncConfig,
     full: bool,
     json: bool,
     quiet: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mode = if full { SyncMode::Full } else { SyncMode::Incremental };
+    let mode = if full {
+        SyncMode::Full
+    } else {
+        SyncMode::Incremental
+    };
 
     if !quiet && !json {
         println!("MotherDuck Sync v{}", motherduck_sync::VERSION);
@@ -178,7 +185,11 @@ async fn run_sync(
         }
     }
 
-    if result.success { Ok(()) } else { Err("Sync failed".into()) }
+    if result.success {
+        Ok(())
+    } else {
+        Err("Sync failed".into())
+    }
 }
 
 async fn run_test(config: SyncConfig, json: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -249,7 +260,11 @@ async fn run_query(
 
     // Show counts for all tables
     if counts {
-        let target_tables = ["daily_stats", "user_activity_summary", "post_activity_daily_stats"];
+        let target_tables = [
+            "daily_stats",
+            "user_activity_summary",
+            "post_activity_daily_stats",
+        ];
         let mut results: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
 
         for table in &target_tables {
@@ -283,14 +298,14 @@ async fn run_query(
     // Execute custom SQL
     if let Some(sql_query) = sql {
         let conn = md_client.connection();
-        
+
         // Use query() directly and iterate
         let mut stmt = conn.prepare(&sql_query)?;
         let mut rows_result = stmt.query([])?;
-        
+
         let mut rows: Vec<Vec<String>> = Vec::new();
         let mut column_count = 0;
-        
+
         while let Some(row) = rows_result.next()? {
             if column_count == 0 {
                 // Detect column count from first row by trying to access columns
@@ -301,7 +316,7 @@ async fn run_query(
                     }
                 }
             }
-            
+
             let mut values = Vec::new();
             for i in 0..column_count {
                 let val: String = match row.get::<_, duckdb::types::Value>(i) {
@@ -323,11 +338,9 @@ async fn run_query(
             }
             rows.push(values);
         }
-        
+
         // Generate column names
-        let column_names: Vec<String> = (0..column_count)
-            .map(|i| format!("col{}", i))
-            .collect();
+        let column_names: Vec<String> = (0..column_count).map(|i| format!("col{}", i)).collect();
 
         if json {
             let json_rows: Vec<serde_json::Value> = rows
@@ -349,8 +362,11 @@ async fn run_query(
             } else {
                 // Print header
                 println!("{}", column_names.join(" | "));
-                println!("{}", "-".repeat(column_names.iter().map(|c| c.len() + 3).sum::<usize>()));
-                
+                println!(
+                    "{}",
+                    "-".repeat(column_names.iter().map(|c| c.len() + 3).sum::<usize>())
+                );
+
                 // Print rows
                 for row in &rows {
                     println!("{}", row.join(" | "));
@@ -381,7 +397,11 @@ async fn run_clean(
     use motherduck_sync::MotherDuckClient;
 
     let md_client = MotherDuckClient::connect(config.motherduck)?;
-    let target_tables = ["daily_stats", "user_activity_summary", "post_activity_daily_stats"];
+    let target_tables = [
+        "daily_stats",
+        "user_activity_summary",
+        "post_activity_daily_stats",
+    ];
 
     // Determine which tables to clean
     let tables_to_clean: Vec<&str> = if let Some(ref t) = table {
@@ -398,9 +418,13 @@ async fn run_clean(
         } else {
             println!("Clean MotherDuck tables\n");
             println!("Usage:");
-            println!("  motherduck-sync clean --truncate           # Clear all data, keep structure");
+            println!(
+                "  motherduck-sync clean --truncate           # Clear all data, keep structure"
+            );
             println!("  motherduck-sync clean --reset              # Drop and recreate tables");
-            println!("  motherduck-sync clean --truncate -t daily_stats  # Truncate specific table");
+            println!(
+                "  motherduck-sync clean --truncate -t daily_stats  # Truncate specific table"
+            );
             return Ok(());
         }
     }
@@ -469,12 +493,12 @@ fn run_generate_secret(input: &str) -> Result<(), Box<dyn std::error::Error>> {
     use base64::{Engine, engine::general_purpose::STANDARD};
 
     // Read the JSON file
-    let content = std::fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read {}: {}", input, e))?;
+    let content =
+        std::fs::read_to_string(input).map_err(|e| format!("Failed to read {}: {}", input, e))?;
 
     // Validate it's valid JSON
-    let _: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid JSON in {}: {}", input, e))?;
+    let _: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid JSON in {}: {}", input, e))?;
 
     // Minify and encode
     let parsed: serde_json::Value = serde_json::from_str(&content)?;
@@ -533,7 +557,9 @@ enabled = true
 }
 
 fn init_logging(level: &str, quiet: bool) {
-    if quiet { return; }
+    if quiet {
+        return;
+    }
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
     fmt().with_env_filter(filter).with_target(false).init();
 }

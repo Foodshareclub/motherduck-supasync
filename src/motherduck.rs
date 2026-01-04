@@ -25,20 +25,18 @@ impl MotherDuckClient {
             let init_conn_str = format!("md:?motherduck_token={}", config.token);
             let init_conn = Connection::open(&init_conn_str)
                 .map_err(|e| Error::motherduck_connection("Failed to connect to MotherDuck", e))?;
-            
+
             // Create database if it doesn't exist
             let create_db = format!("CREATE DATABASE IF NOT EXISTS {}", config.database);
-            init_conn.execute(&create_db, [])
+            init_conn
+                .execute(&create_db, [])
                 .map_err(|e| Error::motherduck_query("", "Failed to create database", e))?;
-            
+
             info!("Ensured database exists: {}", config.database);
         }
 
         // Now connect to the specific database
-        let conn_str = format!(
-            "md:{}?motherduck_token={}",
-            config.database, config.token
-        );
+        let conn_str = format!("md:{}?motherduck_token={}", config.database, config.token);
 
         let conn = Connection::open(&conn_str)
             .map_err(|e| Error::motherduck_connection("Failed to connect to database", e))?;
@@ -82,7 +80,9 @@ impl MotherDuckClient {
 
     /// Create default analytics tables.
     pub fn create_analytics_tables(&self) -> Result<()> {
-        self.conn.execute_batch(r#"
+        self.conn
+            .execute_batch(
+                r#"
             -- Raw data tables for analytics queries
             CREATE TABLE IF NOT EXISTS full_users (
                 id VARCHAR PRIMARY KEY,
@@ -165,7 +165,9 @@ impl MotherDuckClient {
                 total_likes INTEGER,
                 updated_at TIMESTAMP
             );
-        "#).map_err(|e| Error::motherduck_query("", "Create analytics tables failed", e))?;
+        "#,
+            )
+            .map_err(|e| Error::motherduck_query("", "Create analytics tables failed", e))?;
 
         info!("Created/verified analytics tables");
         Ok(())
@@ -185,7 +187,11 @@ impl MotherDuckClient {
         // Get column names from first row (sorted for consistency)
         let mut columns: Vec<&String> = rows[0].keys().collect();
         columns.sort();
-        let col_names = columns.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ");
+        let col_names = columns
+            .iter()
+            .map(|c| c.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
 
         // Build bulk VALUES clause for all rows
         let mut values_parts: Vec<String> = Vec::with_capacity(rows.len());
@@ -202,14 +208,20 @@ impl MotherDuckClient {
 
         let query = format!(
             "INSERT OR REPLACE INTO {} ({}) VALUES {}",
-            mapping.target_table, col_names, values_parts.join(", ")
+            mapping.target_table,
+            col_names,
+            values_parts.join(", ")
         );
 
         self.conn
             .execute(&query, [])
             .map_err(|e| Error::motherduck_query(&mapping.target_table, "Bulk insert failed", e))?;
 
-        debug!("Bulk upserted {} rows to {}", rows.len(), mapping.target_table);
+        debug!(
+            "Bulk upserted {} rows to {}",
+            rows.len(),
+            mapping.target_table
+        );
         Ok(rows.len())
     }
 
@@ -230,15 +242,15 @@ impl MotherDuckClient {
         // Process in batches
         for chunk in rows.chunks(batch_size) {
             // Start transaction
-            self.conn
-                .execute("BEGIN TRANSACTION", [])
-                .map_err(|e| Error::motherduck_query(&mapping.target_table, "Begin transaction failed", e))?;
+            self.conn.execute("BEGIN TRANSACTION", []).map_err(|e| {
+                Error::motherduck_query(&mapping.target_table, "Begin transaction failed", e)
+            })?;
 
             match self.upsert_rows(mapping, chunk) {
                 Ok(count) => {
-                    self.conn
-                        .execute("COMMIT", [])
-                        .map_err(|e| Error::motherduck_query(&mapping.target_table, "Commit failed", e))?;
+                    self.conn.execute("COMMIT", []).map_err(|e| {
+                        Error::motherduck_query(&mapping.target_table, "Commit failed", e)
+                    })?;
                     total += count;
                 }
                 Err(e) => {
@@ -255,7 +267,8 @@ impl MotherDuckClient {
     /// Get row count for a table.
     pub fn count_rows(&self, table: &str) -> Result<i64> {
         let query = format!("SELECT COUNT(*) FROM {}", table);
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(&query)
             .map_err(|e| Error::motherduck_query(table, "Prepare count failed", e))?;
 
@@ -273,7 +286,8 @@ impl MotherDuckClient {
             table
         );
 
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(&query)
             .map_err(|e| Error::motherduck_query(table, "Check table exists failed", e))?;
 
@@ -343,6 +357,9 @@ mod tests {
         assert_eq!(json_to_sql_string(&JsonValue::Null), "NULL");
         assert_eq!(json_to_sql_string(&JsonValue::Bool(true)), "true");
         assert_eq!(json_to_sql_string(&JsonValue::Number(42.into())), "42");
-        assert_eq!(json_to_sql_string(&JsonValue::String("test".into())), "test");
+        assert_eq!(
+            json_to_sql_string(&JsonValue::String("test".into())),
+            "test"
+        );
     }
 }

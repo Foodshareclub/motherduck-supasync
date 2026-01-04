@@ -1,6 +1,5 @@
 //! Schema types and DDL generation for motherduck-sync.
 
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -79,13 +78,23 @@ impl Table {
         let col_defs: Vec<String> = self
             .columns
             .iter()
-            .map(|c| format!("    {} {}{}", c.name, c.column_type.to_duckdb(), c.constraints_ddl()))
+            .map(|c| {
+                format!(
+                    "    {} {}{}",
+                    c.name,
+                    c.column_type.to_duckdb(),
+                    c.constraints_ddl()
+                )
+            })
             .collect();
 
         ddl.push_str(&col_defs.join(",\n"));
 
         if !self.primary_key.is_empty() {
-            ddl.push_str(&format!(",\n    PRIMARY KEY ({})", self.primary_key.join(", ")));
+            ddl.push_str(&format!(
+                ",\n    PRIMARY KEY ({})",
+                self.primary_key.join(", ")
+            ));
         }
 
         ddl.push_str("\n)");
@@ -249,9 +258,10 @@ impl ColumnType {
             s if s.starts_with("character varying") || s.starts_with("varchar") => {
                 ColumnType::Varchar { max_length: None }
             }
-            s if s.starts_with("numeric") || s.starts_with("decimal") => {
-                ColumnType::Decimal { precision: 38, scale: 9 }
-            }
+            s if s.starts_with("numeric") || s.starts_with("decimal") => ColumnType::Decimal {
+                precision: 38,
+                scale: 9,
+            },
             _ => ColumnType::Text, // Default fallback
         }
     }
@@ -339,7 +349,12 @@ mod tests {
     fn test_table_ddl() {
         let mut table = Table::new("test_table");
         table.add_column(Column::new("id", ColumnType::Integer).nullable(false));
-        table.add_column(Column::new("name", ColumnType::Varchar { max_length: Some(255) }));
+        table.add_column(Column::new(
+            "name",
+            ColumnType::Varchar {
+                max_length: Some(255),
+            },
+        ));
         table.add_column(Column::new("created_at", ColumnType::TimestampTz));
         table.set_primary_key(vec!["id".to_string()]);
 
@@ -352,7 +367,10 @@ mod tests {
     #[test]
     fn test_column_type_from_postgres() {
         assert_eq!(ColumnType::from_postgres("integer"), ColumnType::Integer);
-        assert_eq!(ColumnType::from_postgres("timestamptz"), ColumnType::TimestampTz);
+        assert_eq!(
+            ColumnType::from_postgres("timestamptz"),
+            ColumnType::TimestampTz
+        );
         assert_eq!(ColumnType::from_postgres("jsonb"), ColumnType::Json);
     }
 }

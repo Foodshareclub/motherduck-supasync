@@ -55,18 +55,18 @@
 
 pub mod config;
 pub mod error;
-pub mod postgres;
-pub mod motherduck;
-pub mod sync;
-pub mod schema;
 pub mod metrics;
+pub mod motherduck;
+pub mod postgres;
+pub mod schema;
+pub mod sync;
 
 // Re-exports for convenience
 pub use config::{SyncConfig, SyncConfigBuilder, TableMapping, TableMappingBuilder};
 pub use error::{Error, Result};
-pub use sync::{SyncClient, SyncMode, SyncResult, SyncProgress};
-pub use schema::{Schema, Column, ColumnType};
 pub use motherduck::MotherDuckClient;
+pub use schema::{Column, ColumnType, Schema};
+pub use sync::{SyncClient, SyncMode, SyncProgress, SyncResult};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
