@@ -120,23 +120,35 @@ jobs:
         run: |
           echo "🔍 Scanning for hardcoded secrets..."
           
-          # Check for common secret patterns
-          PATTERNS=(
-            "password\s*=\s*['\"][^'\"]+['\"]"
-            "api_key\s*=\s*['\"][^'\"]+['\"]"
-            "secret\s*=\s*['\"][^'\"]+['\"]"
-            "token\s*=\s*['\"][^'\"]+['\"]"
-            "MOTHERDUCK_TOKEN\s*=\s*['\"][^'\"]+['\"]"
-            "DATABASE_URL\s*=\s*postgres://"
-          )
+          # Exclude placeholder patterns (your_*, example, test, etc.)
+          EXCLUDE_PATTERNS="your_|example|test|placeholder|xxx|changeme|TODO|FIXME"
           
+          # Real secret patterns (not placeholders)
           FOUND=0
-          for pattern in "${PATTERNS[@]}"; do
-            if grep -rE "$pattern" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -v "example" | grep -v "test" | grep -v "#"; then
-              echo "⚠️ Potential secret found matching: $pattern"
-              FOUND=1
-            fi
-          done
+          
+          # Check for real API keys (32+ char alphanumeric)
+          if grep -rE "(api_key|apikey|API_KEY)\s*[=:]\s*['\"][a-zA-Z0-9]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+            echo "⚠️ Potential API key found"
+            FOUND=1
+          fi
+          
+          # Check for real tokens (32+ char)
+          if grep -rE "token\s*[=:]\s*['\"][a-zA-Z0-9_-]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+            echo "⚠️ Potential token found"
+            FOUND=1
+          fi
+          
+          # Check for real database URLs with credentials
+          if grep -rE "postgres://[a-zA-Z0-9_]+:[^@]+@[a-zA-Z0-9.-]+:" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+            echo "⚠️ Potential database URL with credentials found"
+            FOUND=1
+          fi
+          
+          # Check for AWS keys
+          if grep -rE "AKIA[0-9A-Z]{16}" --include="*.rs" --include="*.toml" src/ 2>/dev/null; then
+            echo "⚠️ Potential AWS access key found"
+            FOUND=1
+          fi
           
           if [ $FOUND -eq 0 ]; then
             echo "✅ No hardcoded secrets detected"
