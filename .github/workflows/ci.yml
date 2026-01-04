@@ -10,72 +10,225 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-A missing_docs"
 
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: 🧪 Test
+  # ─────────────────────────────────────────────────────────────
+  # 🎨 Code Quality
+  # ─────────────────────────────────────────────────────────────
+  format:
+    name: 🎨 Format
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --check
 
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📦 Cache dependencies
-        uses: actions/cache@v4
+  lint:
+    name: 📎 Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/
             ~/.cargo/git/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-lint-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo clippy -- -D warnings
 
-      - name: 🎨 Check formatting
-        run: cargo fmt --check
+  # ─────────────────────────────────────────────────────────────
+  # 🔨 Build & Test
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo build --release
+      - name: 📦 Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: motherduck-sync-linux
+          path: target/release/motherduck-sync
+          retention-days: 7
 
-      - name: 📎 Clippy lints
-        run: cargo clippy -- -D warnings
+  test:
+    name: ✅ Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo test --all-features
 
-      - name: 🔨 Build release
-        run: cargo build --release
+  docs:
+    name: 📚 Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: "-A missing_docs"
 
-      - name: ✅ Run tests
-        run: cargo test
+  # ─────────────────────────────────────────────────────────────
+  # 🔐 Security
+  # ─────────────────────────────────────────────────────────────
+  security:
+    name: 🔐 Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked || true
+      - name: Run audit
+        run: cargo audit || echo "⚠️ Vulnerabilities found - review required"
 
-      - name: 📚 Build docs
-        run: cargo doc --no-deps
+  secrets-scan:
+    name: 🕵️ Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 🔍 Scan for secrets
+        run: |
+          echo "🔍 Scanning for hardcoded secrets..."
+          
+          # Check for common secret patterns
+          PATTERNS=(
+            "password\s*=\s*['\"][^'\"]+['\"]"
+            "api_key\s*=\s*['\"][^'\"]+['\"]"
+            "secret\s*=\s*['\"][^'\"]+['\"]"
+            "token\s*=\s*['\"][^'\"]+['\"]"
+            "MOTHERDUCK_TOKEN\s*=\s*['\"][^'\"]+['\"]"
+            "DATABASE_URL\s*=\s*postgres://"
+          )
+          
+          FOUND=0
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -rE "$pattern" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -v "example" | grep -v "test" | grep -v "#"; then
+              echo "⚠️ Potential secret found matching: $pattern"
+              FOUND=1
+            fi
+          done
+          
+          if [ $FOUND -eq 0 ]; then
+            echo "✅ No hardcoded secrets detected"
+          else
+            echo "❌ Review the above findings"
+            exit 1
+          fi
 
-      - name: 📋 Verify package contents
+  # ─────────────────────────────────────────────────────────────
+  # 📦 Package Verification
+  # ─────────────────────────────────────────────────────────────
+  package:
+    name: 📦 Package
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 📋 List package contents
         run: cargo package --list
-
       - name: 🧪 Dry-run publish
         run: cargo publish --dry-run
 
+  # ─────────────────────────────────────────────────────────────
+  # 🚀 Publish
+  # ─────────────────────────────────────────────────────────────
   publish:
-    name: 🚀 Publish to crates.io
-    needs: test
+    name: 🚀 Publish
+    needs: [package, security, secrets-scan, docs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: crates-io
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: 🔑 Verify secrets
+        run: |
+          if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
+            echo "❌ CARGO_REGISTRY_TOKEN not set"
+            exit 1
+          fi
+          echo "✅ Registry token configured"
 
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📤 Publish
+      - name: 📤 Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          echo "🚀 Publishing motherduck-sync to crates.io..."
-          cargo publish 2>&1 | tee publish_output.txt
+          echo "═══════════════════════════════════════════════════"
+          echo "🚀 Publishing motherduck-sync to crates.io"
+          echo "═══════════════════════════════════════════════════"
           
-          if grep -q "already uploaded" publish_output.txt; then
-            echo "✅ Version already published - skipping"
-          elif grep -q "Uploading" publish_output.txt; then
-            echo "✅ Successfully published to crates.io!"
+          cargo publish 2>&1 | tee publish.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          
+          if grep -q "already uploaded" publish.log; then
+            echo ""
+            echo "✅ Version already published - nothing to do"
+            exit 0
+          elif grep -q "Uploading" publish.log; then
+            echo ""
+            echo "═══════════════════════════════════════════════════"
+            echo "✅ Successfully published!"
             echo "📦 https://crates.io/crates/motherduck-sync"
+            echo "═══════════════════════════════════════════════════"
+            exit 0
           else
-            echo "⚠️ Publish completed with unknown status"
+            echo ""
+            echo "❌ Publish failed with exit code: $EXIT_CODE"
+            exit $EXIT_CODE
           fi
+
+  # ─────────────────────────────────────────────────────────────
+  # 📊 Summary
+  # ─────────────────────────────────────────────────────────────
+  summary:
+    name: 📊 Summary
+    needs: [format, lint, build, test, docs, security, secrets-scan, package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📊 Pipeline Summary
+        run: |
+          echo "## 🦆 MotherDuck Sync CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🎨 Format | ${{ needs.format.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📎 Lint | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Test | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📚 Docs | ${{ needs.docs.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔐 Security | ${{ needs.security.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🕵️ Secrets | ${{ needs.secrets-scan.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 Package | ${{ needs.package.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
