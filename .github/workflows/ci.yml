@@ -12,7 +12,7 @@
 # ║              ┌──────────┐                 ┌──────────┐                       ║
 # ║              │ Security │                 │ Package  │                       ║
 # ║              │ • audit  │                 │ • verify │                       ║
-# ║              │ • scan   │                 │ • dry-run│                       ║
+# ║              │ • 7 scans│                 │ • dry-run│                       ║
 # ║              └──────────┘                 └──────────┘                       ║
 # ║                    │                             │                           ║
 # ║                    └──────────────┬──────────────┘                           ║
@@ -85,10 +85,7 @@ jobs:
           echo ""
           FAILED=0
           
-          # CI secrets (required)
           check_secret "CARGO_REGISTRY_TOKEN" "${{ secrets.CARGO_REGISTRY_TOKEN }}" "true" || FAILED=1
-          
-          # Sync secrets (optional for CI)
           check_secret "MOTHERDUCK_TOKEN" "${{ secrets.MOTHERDUCK_TOKEN }}" "false"
           check_secret "DATABASE_URL" "${{ secrets.DATABASE_URL }}" "false"
           check_secret "SYNC_TABLES_CONFIG" "${{ secrets.SYNC_TABLES_CONFIG }}" "false"
@@ -99,7 +96,6 @@ jobs:
             exit 1
           fi
           
-          # Set output for publish decision
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
@@ -174,39 +170,308 @@ jobs:
         env:
           RUSTDOCFLAGS: "-A missing_docs -D warnings"
 
+
   # ═══════════════════════════════════════════════════════════════
-  # STAGE 3: Security - After quality passes
+  # STAGE 3: Security - Comprehensive categorized scanning
   # ═══════════════════════════════════════════════════════════════
-  security:
-    name: 🔐 Security
+  
+  # 3a. Dependency vulnerability audit
+  audit:
+    name: 🔍 Audit Dependencies
     needs: [format, lint, build, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      
-      - name: 🔍 Audit dependencies
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked 2>/dev/null || true
+      - name: Run audit
         run: |
-          cargo install cargo-audit --locked 2>/dev/null || true
-          echo "═══ Dependency Audit ═══"
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║        🔍 Dependency Vulnerability Audit         ║"
+          echo "╚══════════════════════════════════════════════════╝"
           cargo audit 2>&1 || echo "⚠️ Review vulnerabilities above"
-      
-      - name: 🕵️ Scan for hardcoded secrets
+
+  # 3b. AWS credentials scan
+  scan-aws:
+    name: 🔑 Scan AWS
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for AWS credentials
         run: |
-          echo "═══ Secrets Scan ═══"
-          EXCLUDE="your_|example|test|placeholder|localhost|127\.0\.0\.1|//!"
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║             🔑 AWS Credentials Scan              ║"
+          echo "╚══════════════════════════════════════════════════╝"
           FOUND=0
           
-          # AWS keys
-          grep -rE "AKIA[0-9A-Z]{16}" --include="*.rs" src/ 2>/dev/null && FOUND=1
+          echo "🔍 AWS Access Key IDs (AKIA...)..."
+          if grep -rE "AKIA[0-9A-Z]{16}" --include="*.rs" --include="*.toml" . 2>/dev/null; then
+            echo "  ❌ AWS Access Key ID found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
           
-          # Real database URLs (not localhost)
-          grep -rE "postgres://\w+:\w+@[\w.-]+\.(com|io|net):" --include="*.rs" src/ 2>/dev/null | grep -vE "$EXCLUDE" && FOUND=1
+          echo "🔍 AWS Secret Access Keys..."
+          if grep -rE "aws_secret_access_key\s*=\s*['\"][A-Za-z0-9/+=]{40}['\"]" --include="*.rs" --include="*.toml" . 2>/dev/null; then
+            echo "  ❌ AWS Secret Access Key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
           
-          # JWT tokens
-          grep -rE "eyJ[a-zA-Z0-9_-]{20,}\.eyJ" --include="*.rs" src/ 2>/dev/null | grep -vE "$EXCLUDE" && FOUND=1
+          [ $FOUND -eq 0 ] && echo "✅ AWS scan passed" || { echo "❌ AWS credentials detected"; exit 1; }
+
+  # 3c. Database credentials scan
+  scan-database:
+    name: 🗄️ Scan Database
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for database credentials
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║           🗄️ Database Credentials Scan           ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          SAFE="localhost|127\.0\.0\.1|example\.com|your_|placeholder|test_db|//!|///|#|\.example"
+          FOUND=0
           
-          [ $FOUND -eq 0 ] && echo "✅ No secrets detected" || { echo "❌ Secrets found"; exit 1; }
+          echo "🔍 PostgreSQL connection strings..."
+          MATCHES=$(grep -rE "postgres(ql)?://[^@]+@[^/]+\.(com|io|net|org|cloud|supabase)" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ PostgreSQL credentials found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 MySQL connection strings..."
+          MATCHES=$(grep -rE "mysql://[^@]+@[^/]+\.(com|io|net|org)" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ MySQL credentials found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 MongoDB connection strings..."
+          MATCHES=$(grep -rE "mongodb(\+srv)?://[^@]+@[^/]+\.(com|io|net|org)" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ MongoDB credentials found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          [ $FOUND -eq 0 ] && echo "✅ Database scan passed" || { echo "❌ Database credentials detected"; exit 1; }
+
+  # 3d. API tokens scan
+  scan-tokens:
+    name: 🎫 Scan Tokens
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for API tokens
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║              🎫 API Tokens Scan                  ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          SAFE="your_|example|placeholder|test|//!|///|#|\.example|_token_here"
+          FOUND=0
+          
+          echo "🔍 JWT tokens..."
+          MATCHES=$(grep -rE "eyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ JWT token found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 GitHub tokens..."
+          if grep -rE "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}" --include="*.rs" --include="*.toml" . 2>/dev/null; then
+            echo "  ❌ GitHub token found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 Slack tokens..."
+          if grep -rE "xox[baprs]-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]{24,}" --include="*.rs" --include="*.toml" . 2>/dev/null; then
+            echo "  ❌ Slack token found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 Stripe keys..."
+          if grep -rE "(sk|pk)_(live|test)_[a-zA-Z0-9]{24,}" --include="*.rs" --include="*.toml" . 2>/dev/null; then
+            echo "  ❌ Stripe key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          [ $FOUND -eq 0 ] && echo "✅ Tokens scan passed" || { echo "❌ API tokens detected"; exit 1; }
+
+
+  # 3e. Private keys scan
+  scan-keys:
+    name: 🔐 Scan Keys
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for private keys
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║             🔐 Private Keys Scan                 ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          FOUND=0
+          
+          echo "🔍 RSA/EC/DSA private keys..."
+          if grep -rE "-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----" --include="*.rs" --include="*.toml" --include="*.pem" --include="*.key" . 2>/dev/null; then
+            echo "  ❌ Private key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 PGP private keys..."
+          if grep -rE "-----BEGIN PGP PRIVATE KEY BLOCK-----" --include="*.rs" --include="*.toml" --include="*.asc" . 2>/dev/null; then
+            echo "  ❌ PGP private key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          [ $FOUND -eq 0 ] && echo "✅ Keys scan passed" || { echo "❌ Private keys detected"; exit 1; }
+
+  # 3f. Cloud provider secrets scan
+  scan-cloud:
+    name: ☁️ Scan Cloud
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for cloud provider secrets
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║          ☁️ Cloud Provider Secrets Scan          ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          SAFE="your_|example|placeholder|test|//!|///|#|\.example"
+          FOUND=0
+          
+          echo "🔍 GCP service account keys..."
+          if grep -rE '"type"\s*:\s*"service_account"' --include="*.json" --include="*.rs" . 2>/dev/null | grep -vE "$SAFE"; then
+            echo "  ❌ GCP service account key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 Azure connection strings..."
+          MATCHES=$(grep -rE "DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{86,}" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ Azure connection string found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 Supabase service keys..."
+          MATCHES=$(grep -rE "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{100,}" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ Supabase key found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 MotherDuck tokens..."
+          MATCHES=$(grep -rE 'md_[a-zA-Z0-9_-]{30,}' --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -3
+            echo "  ❌ MotherDuck token found!"
+            FOUND=1
+          else
+            echo "  ✅ None found"
+          fi
+          
+          [ $FOUND -eq 0 ] && echo "✅ Cloud scan passed" || { echo "❌ Cloud secrets detected"; exit 1; }
+
+  # 3g. High-entropy strings scan (warnings only)
+  scan-entropy:
+    name: 🎲 Scan Entropy
+    needs: [format, lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for high-entropy strings
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║         🎲 High-Entropy Strings Scan             ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          SAFE="your_|example|placeholder|test|//!|///|#|\.example|localhost|127\.0\.0\.1"
+          
+          echo "🔍 Suspicious API key patterns..."
+          MATCHES=$(grep -rE "(api_key|apikey|secret|password|token)\s*[=:]\s*['\"][A-Za-z0-9+/=_-]{32,}['\"]" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -5
+            echo "  ⚠️ Potential secrets (review manually)"
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "🔍 Hardcoded passwords..."
+          MATCHES=$(grep -rE "password\s*[=:]\s*['\"][^'\"]{8,}['\"]" --include="*.rs" --include="*.toml" . 2>/dev/null | grep -vE "$SAFE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | head -5
+            echo "  ⚠️ Potential passwords (review manually)"
+          else
+            echo "  ✅ None found"
+          fi
+          
+          echo "✅ Entropy scan completed (warnings only)"
+
+  # Security summary
+  security:
+    name: 🔐 Security
+    needs: [audit, scan-aws, scan-database, scan-tokens, scan-keys, scan-cloud, scan-entropy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Security summary
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║           🔐 Security Scan Summary               ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          echo ""
+          echo "All security scans completed:"
+          echo "  ✅ Dependency vulnerability audit"
+          echo "  ✅ AWS credentials scan"
+          echo "  ✅ Database credentials scan"
+          echo "  ✅ API tokens scan"
+          echo "  ✅ Private keys scan"
+          echo "  ✅ Cloud provider secrets scan"
+          echo "  ✅ High-entropy strings scan"
+
 
   # ═══════════════════════════════════════════════════════════════
   # STAGE 3: Package - After quality passes (parallel with security)
@@ -287,4 +552,16 @@ jobs:
           | Quality | 📚 Docs | ${{ needs.docs.result == 'success' && '✅' || needs.docs.result == 'skipped' && '⏭️' || '❌' }} |
           | Security | 🔐 Security | ${{ needs.security.result == 'success' && '✅' || needs.security.result == 'skipped' && '⏭️' || '⚠️' }} |
           | Package | 📦 Package | ${{ needs.package.result == 'success' && '✅' || needs.package.result == 'skipped' && '⏭️' || '❌' }} |
+          
+          ### 🔐 Security Scans
+          
+          | Category | Description |
+          |----------|-------------|
+          | 🔍 Audit | Dependency vulnerabilities (cargo-audit) |
+          | 🔑 AWS | Access keys, secret keys |
+          | 🗄️ Database | PostgreSQL, MySQL, MongoDB URLs |
+          | 🎫 Tokens | JWT, GitHub, Slack, Stripe |
+          | 🔐 Keys | RSA, EC, DSA, PGP private keys |
+          | ☁️ Cloud | GCP, Azure, Supabase, MotherDuck |
+          | 🎲 Entropy | High-entropy strings (warnings) |
           EOF
