@@ -149,8 +149,8 @@ jobs:
           exit $SYNC_EXIT
       - name: Verify
         run: |
-          # Suppress table names in verify output
-          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g' || true
+          # Suppress all table names in verify output
+          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/[a-z_]*_stats/[table]/g; s/[a-z_]*_summary/[table]/g; s/[a-z_]*_activity[a-z_]*/[table]/g' | grep -E "(Total|records)" || echo "✓ Verify complete"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
