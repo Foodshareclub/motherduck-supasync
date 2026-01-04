@@ -32,7 +32,9 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings -A missing_docs
+        env:
+          RUSTFLAGS: "-A missing_docs"
+        run: cargo clippy -- -D warnings
 
       - name: Build
         run: cargo build --release
