@@ -1,16 +1,16 @@
 [package]
 name = "motherduck-sync"
-version = "0.1.0"
-edition = "2024"
-authors = ["Foodshare Team"]
-description = "A robust CLI and library for syncing data from Supabase to MotherDuck"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Foodshareclub/motherduck-sync"
 documentation = "https://docs.rs/motherduck-sync"
 readme = "README.md"
 keywords = ["duckdb", "motherduck", "supabase", "sync", "analytics"]
 categories = ["command-line-utilities", "database"]
-rust-version = "1.85"
+rust-version.workspace = true
+description = "A robust CLI and library for syncing data from Supabase to MotherDuck"
 
 [lib]
 name = "motherduck_sync"
