@@ -58,21 +58,35 @@ jobs:
     name: 🔨 Build
     needs: [preflight]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    env:
+      DUCKDB_VERSION: "1.1.3"
     steps:
       - uses: actions/checkout@v4
+      
+      - name: 🦆 Install DuckDB library
+        run: |
+          wget -q "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/libduckdb-linux-amd64.zip"
+          unzip -q libduckdb-linux-amd64.zip -d duckdb-lib
+          sudo cp duckdb-lib/libduckdb.so /usr/local/lib/
+          sudo cp duckdb-lib/duckdb.h /usr/local/include/
+          sudo ldconfig
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          cat << EOF | sudo tee /usr/local/lib/pkgconfig/duckdb.pc
+          prefix=/usr/local
+          libdir=\${prefix}/lib
+          includedir=\${prefix}/include
+          Name: DuckDB
+          Version: ${DUCKDB_VERSION}
+          Libs: -L\${libdir} -lduckdb
+          Cflags: -I\${includedir}
+          EOF
+      
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-      - run: cargo build --release
+      - uses: Swatinem/rust-cache@v2
+      
+      - run: cargo build --no-default-features --features cli,tls-native --release
+      
       - uses: actions/upload-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
@@ -95,6 +109,25 @@ jobs:
       - run: chmod +x motherduck-sync
       - name: Test connectivity
         run: |
+          # Check if config is valid
+          if [ -z "$SYNC_TABLES_CONFIG" ]; then
+            echo "::error::SYNC_TABLES_CONFIG is empty"
+            exit 1
+          fi
+          
+          # Decode and validate config
+          echo "$SYNC_TABLES_CONFIG" | base64 -d > /tmp/tables.json 2>/dev/null || {
+            echo "::error::SYNC_TABLES_CONFIG is not valid base64"
+            exit 1
+          }
+          
+          TABLE_COUNT=$(python3 -c "import json; print(len(json.load(open('/tmp/tables.json')).get('tables', [])))" 2>/dev/null || echo "0")
+          if [ "$TABLE_COUNT" = "0" ]; then
+            echo "::error::SYNC_TABLES_CONFIG has no tables configured"
+            exit 1
+          fi
+          echo "✓ Config valid: $TABLE_COUNT tables"
+          
           # Redact connection URLs from output
           ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g' || exit 1
           echo "✓ Connectivity OK"
