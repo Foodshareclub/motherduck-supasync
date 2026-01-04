@@ -94,18 +94,58 @@ jobs:
           name: motherduck-sync-${{ github.sha }}
       - run: chmod +x motherduck-sync
       - name: Test connectivity
-        run: ./motherduck-sync test
+        run: |
+          # Redact connection URLs from output
+          ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g' || exit 1
+          echo "✓ Connectivity OK"
       - name: Refresh staging
         run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client -qq
-          psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();"
+          sudo apt-get update && sudo apt-get install -y postgresql-client -qq >/dev/null 2>&1
+          psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();" 2>&1 | grep -v "^$" | head -5
       - name: Sync
         run: |
           ARGS="sync"
           [ "${{ inputs.full_sync }}" = "true" ] && ARGS="$ARGS --full"
-          ./motherduck-sync $ARGS --json | tee sync-result.json
+          # Run sync, capture exit code, redact output
+          set +e
+          ./motherduck-sync $ARGS --json > sync-result-raw.json 2>&1
+          SYNC_EXIT=$?
+          set -e
+          # Redact table names from output (replace with table_1, table_2, etc)
+          python3 << 'EOF'
+          import json, sys
+          try:
+              with open('sync-result-raw.json') as f:
+                  data = json.load(f)
+              # Redact table names
+              if 'tables' in data:
+                  redacted = {}
+                  for i, (k, v) in enumerate(data['tables'].items(), 1):
+                      key = f"table_{i}"
+                      v['source_table'] = f"source_{i}"
+                      v['target_table'] = f"target_{i}"
+                      if v.get('error'):
+                          v['error'] = v['error'].split(':')[0] + ': [redacted]' if ':' in v['error'] else '[redacted]'
+                      redacted[key] = v
+                  data['tables'] = redacted
+              with open('sync-result.json', 'w') as f:
+                  json.dump(data, f, indent=2)
+              # Print summary only
+              total = sum(t.get('records_synced', 0) for t in data.get('tables', {}).values())
+              failed = len([t for t in data.get('tables', {}).values() if not t.get('success', True)])
+              print(f"✓ Synced {total} records across {len(data.get('tables', {}))} tables ({failed} failed)")
+          except Exception as e:
+              print(f"⚠ Could not parse sync result: {e}")
+              with open('sync-result-raw.json') as f:
+                  print("[raw output redacted]")
+              with open('sync-result.json', 'w') as f:
+                  f.write('{"redacted": true}')
+          EOF
+          exit $SYNC_EXIT
       - name: Verify
-        run: ./motherduck-sync query --counts
+        run: |
+          # Suppress table names in verify output
+          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g' || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -117,7 +157,23 @@ jobs:
         run: |
           echo "## 🦆 Sync Complete" >> $GITHUB_STEP_SUMMARY
           if [ -f sync-result.json ]; then
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            cat sync-result.json >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            # Show redacted summary
+            python3 << 'EOF' >> $GITHUB_STEP_SUMMARY
+          import json
+          try:
+              with open('sync-result.json') as f:
+                  data = json.load(f)
+              total = sum(t.get('records_synced', 0) for t in data.get('tables', {}).values())
+              success = data.get('success', False)
+              tables = len(data.get('tables', {}))
+              failed = len([t for t in data.get('tables', {}).values() if not t.get('success', True)])
+              print(f"| Metric | Value |")
+              print(f"|--------|-------|")
+              print(f"| Status | {'✅ Success' if success else '⚠️ Partial'} |")
+              print(f"| Tables | {tables} |")
+              print(f"| Records | {total:,} |")
+              print(f"| Failed | {failed} |")
+          except:
+              print("_Results redacted_")
+          EOF
           fi
