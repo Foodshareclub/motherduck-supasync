@@ -31,10 +31,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,11 +57,65 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: motherduck-sync-binary
+          path: target/release/motherduck-sync
+          retention-days: 1
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-features -- -D warnings
+
+  sync:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: motherduck-sync-binary
+          path: .
+
+      - name: Make executable
+        run: chmod +x motherduck-sync
+
       - name: Test connectivity
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        run: ./target/release/motherduck-sync test
+          SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
+        run: ./motherduck-sync test
 
       - name: Refresh staging tables
         if: ${{ inputs.refresh_staging != false }}
@@ -83,13 +136,14 @@ jobs:
           if [ "${{ inputs.full_sync }}" = "true" ]; then
             ARGS="$ARGS --full"
           fi
-          ./target/release/motherduck-sync $ARGS --json | tee sync-result.json
+          ./motherduck-sync $ARGS --json | tee sync-result.json
 
       - name: Verify sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        run: ./target/release/motherduck-sync query --counts
+          SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
+        run: ./motherduck-sync query --counts
 
       - name: Upload results
         uses: actions/upload-artifact@v4
