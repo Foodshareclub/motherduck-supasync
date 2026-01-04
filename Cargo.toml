@@ -21,14 +21,15 @@ name = "motherduck-sync"
 path = "src/bin/main.rs"
 
 [features]
-default = ["cli", "tls-native"]
+default = ["cli", "tls-native", "bundled"]
 cli = ["dep:clap", "dep:indicatif", "dep:console"]
 tls-native = ["dep:postgres-native-tls", "dep:native-tls"]
 tls-rustls = ["dep:tokio-postgres-rustls", "dep:rustls", "dep:webpki-roots"]
+bundled = ["duckdb/bundled"]
 
 [dependencies]
-# DuckDB with bundled build (includes MotherDuck support)
-duckdb = { version = "1.1", features = ["bundled"] }
+# DuckDB - use bundled feature for local dev, pkg-config for CI with pre-built lib
+duckdb = { version = "1.1", default-features = false }
 
 # PostgreSQL client
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
