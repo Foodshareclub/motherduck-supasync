@@ -43,7 +43,7 @@
 //! let mapping = TableMapping::builder()
 //!     .source_table("my_source_table")
 //!     .target_table("my_target_table")
-//!     .primary_key("id")
+//!     .primary_key(["id"])
 //!     .sync_flag_column("synced")
 //!     .build();
 //! ```
