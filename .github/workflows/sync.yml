@@ -106,9 +106,9 @@ jobs:
         run: |
           ARGS="sync"
           [ "${{ inputs.full_sync }}" = "true" ] && ARGS="$ARGS --full"
-          # Run sync, capture exit code, redact output
+          # Run sync, capture exit code, separate logs from JSON
           set +e
-          ./motherduck-sync $ARGS --json > sync-result-raw.json 2>&1
+          ./motherduck-sync $ARGS --json 2>sync-logs.txt | tail -1 > sync-result-raw.json
           SYNC_EXIT=$?
           set -e
           # Redact table names from output (replace with table_1, table_2, etc)
@@ -116,7 +116,12 @@ jobs:
           import json, sys
           try:
               with open('sync-result-raw.json') as f:
-                  data = json.load(f)
+                  content = f.read().strip()
+                  # Find JSON object in output
+                  start = content.find('{')
+                  if start >= 0:
+                      content = content[start:]
+                  data = json.loads(content)
               # Redact table names
               if 'tables' in data:
                   redacted = {}
@@ -125,9 +130,11 @@ jobs:
                       v['source_table'] = f"source_{i}"
                       v['target_table'] = f"target_{i}"
                       if v.get('error'):
-                          v['error'] = v['error'].split(':')[0] + ': [redacted]' if ':' in v['error'] else '[redacted]'
+                          v['error'] = '[redacted]'
                       redacted[key] = v
                   data['tables'] = redacted
+              if 'error' in data:
+                  data['error'] = '[redacted]'
               with open('sync-result.json', 'w') as f:
                   json.dump(data, f, indent=2)
               # Print summary only
@@ -135,9 +142,7 @@ jobs:
               failed = len([t for t in data.get('tables', {}).values() if not t.get('success', True)])
               print(f"✓ Synced {total} records across {len(data.get('tables', {}))} tables ({failed} failed)")
           except Exception as e:
-              print(f"⚠ Could not parse sync result: {e}")
-              with open('sync-result-raw.json') as f:
-                  print("[raw output redacted]")
+              print(f"⚠ Sync output processing: {type(e).__name__}")
               with open('sync-result.json', 'w') as f:
                   f.write('{"redacted": true}')
           EOF
