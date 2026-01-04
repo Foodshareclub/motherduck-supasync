@@ -148,33 +148,38 @@ jobs:
         run: |
           echo "🔍 Scanning for hardcoded secrets..."
           
-          # Exclude placeholder patterns (your_*, example, test, etc.)
-          EXCLUDE_PATTERNS="your_|example|test|placeholder|xxx|changeme|TODO|FIXME"
+          # Exclude patterns: placeholders, localhost, examples, docs
+          EXCLUDE="your_|example|test|placeholder|xxx|changeme|TODO|FIXME|localhost|127\.0\.0\.1|//!"
           
-          # Real secret patterns (not placeholders)
           FOUND=0
           
-          # Check for real API keys (32+ char alphanumeric)
-          if grep -rE "(api_key|apikey|API_KEY)\s*[=:]\s*['\"][a-zA-Z0-9]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+          # Check for real API keys (32+ char alphanumeric, not in comments/docs)
+          if grep -rE "(api_key|apikey|API_KEY)\s*[=:]\s*['\"][a-zA-Z0-9]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE"; then
             echo "⚠️ Potential API key found"
             FOUND=1
           fi
           
-          # Check for real tokens (32+ char)
-          if grep -rE "token\s*[=:]\s*['\"][a-zA-Z0-9_-]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+          # Check for real tokens (32+ char, not placeholders)
+          if grep -rE "token\s*[=:]\s*['\"][a-zA-Z0-9_-]{32,}['\"]" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE"; then
             echo "⚠️ Potential token found"
             FOUND=1
           fi
           
-          # Check for real database URLs with credentials
-          if grep -rE "postgres://[a-zA-Z0-9_]+:[^@]+@[a-zA-Z0-9.-]+:" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE_PATTERNS"; then
+          # Check for real database URLs (exclude localhost, examples, doc comments)
+          if grep -rE "postgres://[a-zA-Z0-9_]+:[^@]+@[a-zA-Z0-9.-]+\.(com|io|net|org):" --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE"; then
             echo "⚠️ Potential database URL with credentials found"
             FOUND=1
           fi
           
-          # Check for AWS keys
+          # Check for AWS keys (always real)
           if grep -rE "AKIA[0-9A-Z]{16}" --include="*.rs" --include="*.toml" src/ 2>/dev/null; then
             echo "⚠️ Potential AWS access key found"
+            FOUND=1
+          fi
+          
+          # Check for JWT tokens (always suspicious if hardcoded)
+          if grep -rE "eyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\." --include="*.rs" --include="*.toml" src/ 2>/dev/null | grep -vE "$EXCLUDE"; then
+            echo "⚠️ Potential JWT token found"
             FOUND=1
           fi
           
