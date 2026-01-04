@@ -1,7 +1,5 @@
 # Build artifacts
 /target
-.env
-tables.local.json
 **/*.rs.bk
 
 # IDE
@@ -15,10 +13,11 @@ tables.local.json
 Thumbs.db
 
 # Config with secrets
-motherduck-sync.toml
-.motherduck-sync.toml
 .env
 .env.local
+tables.local.json
+motherduck-sync.toml
+.motherduck-sync.toml
 
 # Test artifacts
 *.log
