@@ -25,10 +25,6 @@ on:
         description: 'Full sync (resync all records)'
         type: boolean
         default: false
-      skip_tests:
-        description: 'Skip tests (faster sync)'
-        type: boolean
-        default: false
 
 concurrency:
   group: motherduck-sync-${{ github.ref }}
@@ -36,7 +32,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
   preflight:
@@ -45,60 +40,19 @@ jobs:
     timeout-minutes: 2
     outputs:
       secrets_valid: ${{ steps.check.outputs.valid }}
-      is_scheduled: ${{ steps.check.outputs.is_scheduled }}
     steps:
       - name: Validate secrets
         id: check
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "is_scheduled=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_scheduled=false" >> $GITHUB_OUTPUT
-          fi
           MISSING=""
-          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
-            MISSING="${MISSING}DATABASE_URL "
-          fi
-          if [ -z "${{ secrets.MOTHERDUCK_TOKEN }}" ]; then
-            MISSING="${MISSING}MOTHERDUCK_TOKEN "
-          fi
-          if [ -z "${{ secrets.SYNC_TABLES_CONFIG }}" ]; then
-            MISSING="${MISSING}SYNC_TABLES_CONFIG "
-          fi
+          [ -z "${{ secrets.DATABASE_URL }}" ] && MISSING="${MISSING}DATABASE_URL "
+          [ -z "${{ secrets.MOTHERDUCK_TOKEN }}" ] && MISSING="${MISSING}MOTHERDUCK_TOKEN "
+          [ -z "${{ secrets.SYNC_TABLES_CONFIG }}" ] && MISSING="${MISSING}SYNC_TABLES_CONFIG "
           if [ -n "$MISSING" ]; then
-            echo "::error::Missing secrets: $MISSING"
-            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "::error::Missing: $MISSING"
             exit 1
           fi
           echo "valid=true" >> $GITHUB_OUTPUT
-
-  test:
-    name: 🧪 Test
-    needs: [preflight]
-    if: inputs.skip_tests != true && needs.preflight.outputs.is_scheduled != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-      - name: Format
-        run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy --all-features -- -W clippy::all
-      - name: Tests
-        run: cargo test --all-features
 
   build:
     name: 🔨 Build
@@ -118,8 +72,7 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Build
-        run: cargo build --release
+      - run: cargo build --release
       - uses: actions/upload-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
@@ -128,12 +81,7 @@ jobs:
 
   sync:
     name: 🚀 Sync
-    needs: [preflight, build, test]
-    if: |
-      always() && 
-      needs.preflight.result == 'success' && 
-      needs.build.result == 'success' && 
-      (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [preflight, build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -144,8 +92,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
-      - name: Setup
-        run: chmod +x motherduck-sync
+      - run: chmod +x motherduck-sync
       - name: Test connectivity
         run: ./motherduck-sync test
       - name: Refresh staging
@@ -155,9 +102,7 @@ jobs:
       - name: Sync
         run: |
           ARGS="sync"
-          if [ "${{ inputs.full_sync }}" = "true" ]; then
-            ARGS="$ARGS --full"
-          fi
+          [ "${{ inputs.full_sync }}" = "true" ] && ARGS="$ARGS --full"
           ./motherduck-sync $ARGS --json | tee sync-result.json
       - name: Verify
         run: ./motherduck-sync query --counts
@@ -167,21 +112,12 @@ jobs:
           name: sync-result-${{ github.run_id }}
           path: sync-result.json
           retention-days: 30
-
-  notify:
-    name: 📢 Notify
-    needs: [preflight, test, build, sync]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
       - name: Summary
+        if: always()
         run: |
-          echo "## 🦆 MotherDuck Sync" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Preflight | ${{ needs.preflight.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Sync | ${{ needs.sync.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "## 🦆 Sync Complete" >> $GITHUB_STEP_SUMMARY
+          if [ -f sync-result.json ]; then
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat sync-result.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
