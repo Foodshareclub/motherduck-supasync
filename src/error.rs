@@ -1,6 +1,5 @@
 //! Error types for motherduck-sync.
 
-
 use thiserror::Error;
 
 /// Result type alias using the library's Error type.
@@ -135,7 +134,10 @@ impl Error {
     }
 
     /// Create a PostgreSQL connection error.
-    pub fn postgres_connection(message: impl Into<String>, source: impl std::error::Error + Send + Sync + 'static) -> Self {
+    pub fn postgres_connection(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
         Self::PostgresConnection {
             message: message.into(),
             source: None, // We lose the specific type but keep the message
@@ -143,7 +145,10 @@ impl Error {
     }
 
     /// Create a PostgreSQL connection error with tokio_postgres::Error.
-    pub fn postgres_connection_pg(message: impl Into<String>, source: tokio_postgres::Error) -> Self {
+    pub fn postgres_connection_pg(
+        message: impl Into<String>,
+        source: tokio_postgres::Error,
+    ) -> Self {
         Self::PostgresConnection {
             message: message.into(),
             source: Some(source),
@@ -208,9 +213,7 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Error::PostgresConnection { .. }
-                | Error::MotherDuckConnection { .. }
-                | Error::Io(_)
+            Error::PostgresConnection { .. } | Error::MotherDuckConnection { .. } | Error::Io(_)
         )
     }
 

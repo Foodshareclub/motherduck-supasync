@@ -242,7 +242,11 @@ impl SyncClient {
             tables: table_results,
             duration_ms,
             completed_at: chrono::Utc::now().to_rfc3339(),
-            error: if overall_success { None } else { Some("Some tables failed to sync".into()) },
+            error: if overall_success {
+                None
+            } else {
+                Some("Some tables failed to sync".into())
+            },
         };
 
         if overall_success {
@@ -265,11 +269,7 @@ impl SyncClient {
 
     /// Sync a single table.
     #[instrument(skip(self), fields(table = %mapping.source_table))]
-    async fn sync_table(
-        &self,
-        mapping: &TableMapping,
-        full_sync: bool,
-    ) -> Result<(usize, usize)> {
+    async fn sync_table(&self, mapping: &TableMapping, full_sync: bool) -> Result<(usize, usize)> {
         self.report_progress(SyncProgress {
             table: mapping.source_table.clone(),
             phase: SyncPhase::Fetching,
@@ -305,7 +305,8 @@ impl SyncClient {
 
         // Insert to MotherDuck
         let synced = if self.config.sync.use_transactions {
-            self.md_client.batch_upsert(mapping, &rows, self.config.sync.batch_size)?
+            self.md_client
+                .batch_upsert(mapping, &rows, self.config.sync.batch_size)?
         } else {
             self.md_client.upsert_rows(mapping, &rows)?
         };

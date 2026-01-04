@@ -43,7 +43,8 @@ impl Metrics {
         }
         self.records_synced.fetch_add(records, Ordering::Relaxed);
         self.records_failed.fetch_add(failed, Ordering::Relaxed);
-        self.sync_duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
+        self.sync_duration_ms
+            .fetch_add(duration_ms, Ordering::Relaxed);
     }
 
     /// Record a PostgreSQL query.
@@ -168,7 +169,7 @@ mod tests {
     #[test]
     fn test_metrics_recording() {
         let metrics = Metrics::new();
-        
+
         metrics.record_sync(true, 100, 5, 1000);
         metrics.record_sync(false, 0, 0, 500);
         metrics.record_pg_query();

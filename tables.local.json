@@ -1,0 +1,50 @@
+[
+  {
+    "source": "analytics_staging_users",
+    "target": "full_users",
+    "pk": ["id"],
+    "order_by": "created_at"
+  },
+  {
+    "source": "analytics_staging_listings",
+    "target": "full_listings",
+    "pk": ["id"],
+    "order_by": "created_at"
+  },
+  {
+    "source": "analytics_daily_stats",
+    "target": "daily_stats",
+    "pk": ["date"],
+    "order_by": "date"
+  },
+  {
+    "source": "analytics_user_activity",
+    "target": "user_activity_summary",
+    "pk": ["user_id"],
+    "order_by": "updated_at"
+  },
+  {
+    "source": "analytics_post_activity",
+    "target": "post_activity_daily_stats",
+    "pk": ["id"],
+    "order_by": "date"
+  },
+  {
+    "source": "analytics_staging_rooms",
+    "target": "full_rooms",
+    "pk": ["id"],
+    "order_by": "created_at"
+  },
+  {
+    "source": "analytics_staging_reviews",
+    "target": "full_reviews",
+    "pk": ["id"],
+    "order_by": "created_at"
+  },
+  {
+    "source": "analytics_staging_favorites",
+    "target": "full_favorites",
+    "pk": ["id"],
+    "order_by": "created_at"
+  }
+]

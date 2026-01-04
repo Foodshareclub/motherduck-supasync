@@ -49,8 +49,8 @@ impl SyncConfig {
         let motherduck_token = std::env::var("MOTHERDUCK_TOKEN")
             .map_err(|_| Error::config("MOTHERDUCK_TOKEN not set"))?;
 
-        let motherduck_database = std::env::var("MOTHERDUCK_DATABASE")
-            .unwrap_or_else(|_| "analytics".to_string());
+        let motherduck_database =
+            std::env::var("MOTHERDUCK_DATABASE").unwrap_or_else(|_| "analytics".to_string());
 
         Self::builder()
             .postgres_url(&postgres_url)
@@ -63,10 +63,10 @@ impl SyncConfig {
     pub fn from_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| Error::config(format!("Failed to read {}: {}", path, e)))?;
-        
+
         let config: Self = toml::from_str(&content)
             .map_err(|e| Error::config(format!("Failed to parse {}: {}", path, e)))?;
-        
+
         config.validate()?;
         Ok(config)
     }
@@ -77,7 +77,6 @@ impl SyncConfig {
             .map_err(|e| Error::validation(format!("Config validation failed: {}", e)))
     }
 }
-
 
 /// PostgreSQL connection configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -196,7 +195,6 @@ impl Default for SyncBehaviorConfig {
     }
 }
 
-
 /// Table mapping configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TableMapping {
@@ -245,7 +243,10 @@ impl TableMapping {
 
     /// Get target column name.
     pub fn target_column<'a>(&'a self, source: &'a str) -> &'a str {
-        self.column_mappings.get(source).map(|s| s.as_str()).unwrap_or(source)
+        self.column_mappings
+            .get(source)
+            .map(|s| s.as_str())
+            .unwrap_or(source)
     }
 }
 
@@ -315,7 +316,9 @@ impl TableMappingBuilder {
     }
 
     pub fn build(self) -> Result<TableMapping> {
-        let source = self.source_table.ok_or_else(|| Error::config("source_table required"))?;
+        let source = self
+            .source_table
+            .ok_or_else(|| Error::config("source_table required"))?;
         let target = self.target_table.unwrap_or_else(|| source.clone());
 
         if self.primary_key.is_empty() {
@@ -335,7 +338,6 @@ impl TableMappingBuilder {
         })
     }
 }
-
 
 /// Retry configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -480,10 +482,14 @@ impl SyncConfigBuilder {
     }
 
     pub fn build(self) -> Result<SyncConfig> {
-        let pg_url = self.postgres_url.ok_or_else(|| Error::config("postgres_url required"))?;
+        let pg_url = self
+            .postgres_url
+            .ok_or_else(|| Error::config("postgres_url required"))?;
         Url::parse(&pg_url).map_err(|e| Error::config(format!("Invalid PostgreSQL URL: {}", e)))?;
 
-        let md_token = self.motherduck_token.ok_or_else(|| Error::config("motherduck_token required"))?;
+        let md_token = self
+            .motherduck_token
+            .ok_or_else(|| Error::config("motherduck_token required"))?;
 
         let config = SyncConfig {
             postgres: PostgresConfig {
@@ -501,7 +507,11 @@ impl SyncConfigBuilder {
                 batch_size: self.batch_size.unwrap_or_else(default_batch_size),
                 ..Default::default()
             },
-            tables: if self.tables.is_empty() { default_tables() } else { self.tables },
+            tables: if self.tables.is_empty() {
+                default_tables()
+            } else {
+                self.tables
+            },
             retry: RetryConfig {
                 max_retries: self.max_retries.unwrap_or_else(default_max_retries),
                 ..Default::default()
@@ -518,18 +528,42 @@ impl SyncConfigBuilder {
 }
 
 // Defaults
-fn default_pool_size() -> u32 { 5 }
-fn default_timeout_secs() -> u64 { 30 }
-fn default_database() -> String { "analytics".into() }
-fn default_schema() -> String { "main".into() }
-fn default_batch_size() -> usize { 1000 }
-fn default_sync_flag() -> String { "synced_to_motherduck".into() }
-fn default_max_retries() -> u32 { 3 }
-fn default_initial_backoff_ms() -> u64 { 1000 }
-fn default_max_backoff_ms() -> u64 { 60000 }
-fn default_multiplier() -> f64 { 2.0 }
-fn default_log_level() -> String { "info".into() }
-fn default_true() -> bool { true }
+fn default_pool_size() -> u32 {
+    5
+}
+fn default_timeout_secs() -> u64 {
+    30
+}
+fn default_database() -> String {
+    "analytics".into()
+}
+fn default_schema() -> String {
+    "main".into()
+}
+fn default_batch_size() -> usize {
+    1000
+}
+fn default_sync_flag() -> String {
+    "synced_to_motherduck".into()
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_initial_backoff_ms() -> u64 {
+    1000
+}
+fn default_max_backoff_ms() -> u64 {
+    60000
+}
+fn default_multiplier() -> f64 {
+    2.0
+}
+fn default_log_level() -> String {
+    "info".into()
+}
+fn default_true() -> bool {
+    true
+}
 
 /// Compact table config for JSON parsing from environment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -581,10 +615,12 @@ pub fn tables_from_env() -> Result<Vec<TableMapping>> {
         Ok(encoded) => {
             // Decode base64
             use base64::{Engine, engine::general_purpose::STANDARD};
-            let decoded = STANDARD.decode(&encoded)
-                .map_err(|e| Error::config(format!("Failed to decode SYNC_TABLES_CONFIG base64: {}", e)))?;
-            String::from_utf8(decoded)
-                .map_err(|e| Error::config(format!("SYNC_TABLES_CONFIG is not valid UTF-8: {}", e)))?
+            let decoded = STANDARD.decode(&encoded).map_err(|e| {
+                Error::config(format!("Failed to decode SYNC_TABLES_CONFIG base64: {}", e))
+            })?;
+            String::from_utf8(decoded).map_err(|e| {
+                Error::config(format!("SYNC_TABLES_CONFIG is not valid UTF-8: {}", e))
+            })?
         }
         Err(_) => {
             // Try plain JSON (for local dev)
