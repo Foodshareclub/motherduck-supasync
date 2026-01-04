@@ -2,8 +2,10 @@ name: Sync to MotherDuck
 
 on:
   schedule:
-    # Run daily at 3 AM UTC
+    # Run 3 times daily: 3 AM, 11 AM, 7 PM UTC
     - cron: '0 3 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 19 * * *'
   push:
     branches: [main]
     paths:
