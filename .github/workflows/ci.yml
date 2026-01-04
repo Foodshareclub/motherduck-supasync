@@ -117,20 +117,30 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════
   # STAGE 2: Quality - Single job, compile once, run all checks
+  # Uses sccache to cache DuckDB C++ compilation across runs
   # ═══════════════════════════════════════════════════════════════
   quality:
     name: 🔍 Quality
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v4
+      
+      - name: 🚀 Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "duckdb-build"
       
       - name: 🎨 Format check
         run: cargo fmt --check
@@ -155,6 +165,9 @@ jobs:
           name: binary-${{ github.sha }}
           path: target/release/motherduck-sync
           retention-days: 7
+      
+      - name: 📊 sccache stats
+        run: sccache --show-stats
 
   # ═══════════════════════════════════════════════════════════════
   # STAGE 3: Security - Parallel scans (no compilation needed)
