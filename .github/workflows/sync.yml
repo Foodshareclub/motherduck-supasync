@@ -157,7 +157,7 @@ jobs:
         run: cargo fmt --check
 
       - name: 🔍 Clippy lints
-        run: cargo clippy --all-features -- -D warnings -A missing_docs -A dead_code -A unused_variables -A clippy::redundant_closure
+        run: cargo clippy --all-features -- -W clippy::all
 
       - name: 🧪 Run tests
         run: cargo test --all-features
