@@ -31,11 +31,87 @@ jobs:
           all_but_latest: true
 
   # ─────────────────────────────────────────────────────────────
+  # 🔑 Secrets Validation
+  # ─────────────────────────────────────────────────────────────
+  validate-secrets:
+    name: 🔑 Validate Secrets
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: 🔑 Check required secrets
+        run: |
+          echo "═══════════════════════════════════════════════════"
+          echo "🔑 Validating GitHub Secrets Configuration"
+          echo "═══════════════════════════════════════════════════"
+          echo ""
+          
+          MISSING=()
+          CONFIGURED=()
+          
+          # Check CARGO_REGISTRY_TOKEN (required for publish)
+          if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
+            MISSING+=("CARGO_REGISTRY_TOKEN")
+          else
+            CONFIGURED+=("CARGO_REGISTRY_TOKEN")
+          fi
+          
+          # Check MOTHERDUCK_TOKEN (required for sync workflow)
+          if [ -z "${{ secrets.MOTHERDUCK_TOKEN }}" ]; then
+            MISSING+=("MOTHERDUCK_TOKEN")
+          else
+            CONFIGURED+=("MOTHERDUCK_TOKEN")
+          fi
+          
+          # Check DATABASE_URL (required for sync workflow)
+          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+            MISSING+=("DATABASE_URL")
+          else
+            CONFIGURED+=("DATABASE_URL")
+          fi
+          
+          # Check SYNC_TABLES_CONFIG (required for sync workflow)
+          if [ -z "${{ secrets.SYNC_TABLES_CONFIG }}" ]; then
+            MISSING+=("SYNC_TABLES_CONFIG")
+          else
+            CONFIGURED+=("SYNC_TABLES_CONFIG")
+          fi
+          
+          # Report configured secrets
+          echo "✅ Configured secrets:"
+          for secret in "${CONFIGURED[@]}"; do
+            echo "   • $secret"
+          done
+          echo ""
+          
+          # Report missing secrets
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "⚠️  Missing secrets (some features may not work):"
+            for secret in "${MISSING[@]}"; do
+              echo "   • $secret"
+            done
+            echo ""
+            echo "📝 To configure secrets:"
+            echo "   https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo ""
+            
+            # Only fail if CARGO_REGISTRY_TOKEN is missing (required for publish)
+            if [[ " ${MISSING[*]} " =~ " CARGO_REGISTRY_TOKEN " ]]; then
+              echo "❌ CARGO_REGISTRY_TOKEN is required for publishing"
+              exit 1
+            fi
+          else
+            echo "✅ All secrets configured!"
+          fi
+          echo ""
+          echo "═══════════════════════════════════════════════════"
+
+  # ─────────────────────────────────────────────────────────────
   # 🎨 Code Quality
   # ─────────────────────────────────────────────────────────────
   format:
     name: 🎨 Format
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -47,7 +123,7 @@ jobs:
 
   lint:
     name: 📎 Lint
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -69,7 +145,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   build:
     name: 🔨 Build
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -92,7 +168,7 @@ jobs:
 
   test:
     name: ✅ Test
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -109,7 +185,7 @@ jobs:
 
   docs:
     name: 📚 Docs
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -124,7 +200,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   security:
     name: 🔐 Security Audit
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -137,7 +213,7 @@ jobs:
 
   secrets-scan:
     name: 🕵️ Secrets Scan
-    needs: preflight
+    needs: [preflight, validate-secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -261,7 +337,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   summary:
     name: 📊 Summary
-    needs: [format, lint, build, test, docs, security, secrets-scan, package]
+    needs: [validate-secrets, format, lint, build, test, docs, security, secrets-scan, package]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -272,6 +348,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔑 Secrets | ${{ needs.validate-secrets.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🎨 Format | ${{ needs.format.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📎 Lint | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🔨 Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
