@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                     🦆 MotherDuck Sync - CI & Publish                        ║
 # ║                                                                              ║
-# ║  Pipeline Flow:                                                              ║
+# ║  Pipeline Flow (optimized - single compilation):                             ║
 # ║  ┌─────────┐   ┌──────────────────────────────────────────────┐              ║
-# ║  │ Gate    │──▶│ Quality (parallel)                           │              ║
-# ║  │ • stale │   │ • format • lint • build • test • docs        │              ║
+# ║  │ Gate    │──▶│ Quality (single job, sequential)             │              ║
+# ║  │ • stale │   │ format → lint → build → test → docs          │              ║
 # ║  │ • secrets│   └──────────────────────────────────────────────┘              ║
 # ║  └─────────┘                      │                                          ║
 # ║                    ┌──────────────┴──────────────┐                           ║
@@ -103,73 +103,60 @@ jobs:
           fi
 
   # ═══════════════════════════════════════════════════════════════
-  # STAGE 2: Quality - Parallel code quality checks
+  # STAGE 2: Quality - Single job, compile once, run all checks
   # ═══════════════════════════════════════════════════════════════
-  format:
-    name: 🎨 Format
+  quality:
+    name: 🔍 Quality
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      - run: cargo fmt --check
-
-  lint:
-    name: 📎 Lint
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
         with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets -- -D warnings
-
-  build:
-    name: 🔨 Build
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release
-      - uses: actions/upload-artifact@v4
+          cache-on-failure: true
+      
+      - name: 🎨 Format check
+        run: |
+          echo "═══ Format Check ═══"
+          cargo fmt --check
+          echo "✅ Format passed"
+      
+      - name: 📎 Lint (clippy)
+        run: |
+          echo "═══ Clippy Lint ═══"
+          cargo clippy --all-targets -- -D warnings
+          echo "✅ Lint passed"
+      
+      - name: 🔨 Build release
+        run: |
+          echo "═══ Release Build ═══"
+          cargo build --release
+          echo "✅ Build passed"
+      
+      - name: ✅ Run tests
+        run: |
+          echo "═══ Tests ═══"
+          cargo test --all-features --no-fail-fast
+          echo "✅ Tests passed"
+      
+      - name: 📚 Build docs
+        run: |
+          echo "═══ Documentation ═══"
+          cargo doc --no-deps
+          echo "✅ Docs passed"
+        env:
+          RUSTDOCFLAGS: "-D warnings -A missing_docs"
+      
+      - name: 📤 Upload binary
+        uses: actions/upload-artifact@v4
         with:
           name: binary-${{ github.sha }}
           path: target/release/motherduck-sync
           retention-days: 7
-
-  test:
-    name: ✅ Test
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all-features --no-fail-fast
-
-  docs:
-    name: 📚 Docs
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Build documentation
-        run: cargo doc --no-deps
-        env:
-          RUSTDOCFLAGS: "-D warnings -A missing_docs"
 
 
   # ═══════════════════════════════════════════════════════════════
@@ -179,7 +166,7 @@ jobs:
   # 3a. Dependency vulnerability audit
   audit:
     name: 🔍 Audit Dependencies
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -196,7 +183,7 @@ jobs:
   # 3b. AWS credentials scan
   scan-aws:
     name: 🔑 Scan AWS
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -229,7 +216,7 @@ jobs:
   # 3c. Database credentials scan
   scan-database:
     name: 🗄️ Scan Database
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -277,7 +264,7 @@ jobs:
   # 3d. API tokens scan
   scan-tokens:
     name: 🎫 Scan Tokens
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -330,7 +317,7 @@ jobs:
   # 3e. Private keys scan
   scan-keys:
     name: 🔐 Scan Keys
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -363,7 +350,7 @@ jobs:
   # 3f. Cloud provider secrets scan
   scan-cloud:
     name: ☁️ Scan Cloud
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -419,7 +406,7 @@ jobs:
   # 3g. High-entropy strings scan (warnings only)
   scan-entropy:
     name: 🎲 Scan Entropy
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -479,7 +466,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════
   package:
     name: 📦 Package
-    needs: [format, lint, build, test]
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -499,7 +486,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════
   publish:
     name: 🚀 Publish
-    needs: [gate, security, package, docs]
+    needs: [gate, security, package]
     if: needs.gate.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -533,7 +520,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════
   summary:
     name: 📊 Summary
-    needs: [gate, format, lint, build, test, docs, security, package]
+    needs: [gate, quality, security, package]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 1
@@ -546,11 +533,7 @@ jobs:
           | Stage | Job | Status |
           |-------|-----|--------|
           | Gate | 🚦 Gate | ${{ needs.gate.result == 'success' && '✅' || '❌' }} |
-          | Quality | 🎨 Format | ${{ needs.format.result == 'success' && '✅' || needs.format.result == 'skipped' && '⏭️' || '❌' }} |
-          | Quality | 📎 Lint | ${{ needs.lint.result == 'success' && '✅' || needs.lint.result == 'skipped' && '⏭️' || '❌' }} |
-          | Quality | 🔨 Build | ${{ needs.build.result == 'success' && '✅' || needs.build.result == 'skipped' && '⏭️' || '❌' }} |
-          | Quality | ✅ Test | ${{ needs.test.result == 'success' && '✅' || needs.test.result == 'skipped' && '⏭️' || '❌' }} |
-          | Quality | 📚 Docs | ${{ needs.docs.result == 'success' && '✅' || needs.docs.result == 'skipped' && '⏭️' || '❌' }} |
+          | Quality | 🔍 Quality | ${{ needs.quality.result == 'success' && '✅' || needs.quality.result == 'skipped' && '⏭️' || '❌' }} |
           | Security | 🔐 Security | ${{ needs.security.result == 'success' && '✅' || needs.security.result == 'skipped' && '⏭️' || '⚠️' }} |
           | Package | 📦 Package | ${{ needs.package.result == 'success' && '✅' || needs.package.result == 'skipped' && '⏭️' || '❌' }} |
           
