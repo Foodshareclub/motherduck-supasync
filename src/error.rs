@@ -136,7 +136,7 @@ impl Error {
     /// Create a PostgreSQL connection error.
     pub fn postgres_connection(
         message: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
+        _source: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
         Self::PostgresConnection {
             message: message.into(),

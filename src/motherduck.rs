@@ -319,6 +319,7 @@ impl MotherDuckClient {
 }
 
 /// Convert JSON value to SQL string representation.
+#[allow(dead_code)]
 fn json_to_sql_string(value: &JsonValue) -> String {
     match value {
         JsonValue::Null => "NULL".to_string(),

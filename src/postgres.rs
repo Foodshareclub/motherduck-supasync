@@ -148,7 +148,7 @@ impl PostgresClient {
         }
 
         let pk_col = &mapping.primary_key[0];
-        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
+        let _placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
 
         // Use text comparison for flexibility with different PK types
         let query = format!(
@@ -217,6 +217,7 @@ impl PostgresClient {
 }
 
 /// Convert a PostgreSQL row to JSON map.
+#[allow(dead_code)]
 fn row_to_json(row: &Row, skip_column: &str) -> HashMap<String, JsonValue> {
     let mut map = HashMap::new();
 
