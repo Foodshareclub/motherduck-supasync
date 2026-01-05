@@ -238,13 +238,11 @@ jobs:
           [ $FOUND -eq 0 ] && echo "✅ No secrets found" || { echo "❌ Secrets detected!"; exit 1; }
 
   # ═══════════════════════════════════════════════════════════════
-  # STAGE 3: Package - Verify publishable (only on release)
-  # Skipped on regular commits to save ~8min build time
+  # STAGE 3: Package - Verify publishable
   # ═══════════════════════════════════════════════════════════════
   package:
     name: 📦 Package
     needs: [gate, quality]
-    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
