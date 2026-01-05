@@ -184,14 +184,14 @@ jobs:
           SYNC_EXIT=$?
           set -e
           
-          # Show redacted stderr
+          # Show redacted stderr (more lines for debugging)
           echo "=== Logs (redacted): ==="
-          head -10 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g; s/[a-z_]*staging[a-z_]*/[table]/g' || true
+          head -30 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || true
           
           # Process JSON output with sed (no Python)
           if [ -s sync-stdout.txt ]; then
-            # Redact table names in JSON
-            sed 's/"source_table": "[^"]*"/"source_table": "[redacted]"/g; s/"target_table": "[^"]*"/"target_table": "[redacted]"/g; s/"error": "[^"]*"/"error": "[redacted]"/g' sync-stdout.txt > sync-result.json
+            # Redact table names but keep errors visible for debugging
+            sed 's/"source_table": "[^"]*"/"source_table": "[redacted]"/g; s/"target_table": "[^"]*"/"target_table": "[redacted]"/g' sync-stdout.txt > sync-result.json
             
             # Extract summary using grep/sed
             TABLES=$(grep -o '"tables"' sync-result.json | wc -l || echo "0")
@@ -201,6 +201,9 @@ jobs:
               echo "✓ Sync completed successfully"
             else
               echo "⚠ Sync completed with issues"
+              # Show errors for debugging
+              echo "=== Errors: ==="
+              grep '"error":' sync-result.json | grep -v 'null' | head -5 || true
             fi
           else
             echo '{"error": "no output", "success": false}' > sync-result.json
