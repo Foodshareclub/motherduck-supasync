@@ -115,7 +115,6 @@ jobs:
       
       - name: 🦆 Install DuckDB library
         run: |
-          # The binary is dynamically linked - need libduckdb.so at runtime
           wget -q "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/libduckdb-linux-amd64.zip"
           unzip -q libduckdb-linux-amd64.zip -d duckdb-lib
           sudo cp duckdb-lib/libduckdb.so /usr/local/lib/
@@ -126,158 +125,84 @@ jobs:
       
       - name: Test connectivity
         run: |
-          # Check if config is valid
+          # Validate config exists
           if [ -z "$SYNC_TABLES_CONFIG" ]; then
             echo "::error::SYNC_TABLES_CONFIG is empty"
             exit 1
           fi
           
-          # Decode and validate config (expects JSON array, not {"tables": [...]})
-          echo "$SYNC_TABLES_CONFIG" | base64 -d > /tmp/tables.json 2>/dev/null || {
-            echo "::error::SYNC_TABLES_CONFIG is not valid base64"
-            exit 1
-          }
-          
-          # Parse as array directly (format: [{...}, {...}])
-          TABLE_COUNT=$(python3 -c "
-          import json
-          with open('/tmp/tables.json') as f:
-              data = json.load(f)
-          # Handle both array format and object format
-          if isinstance(data, list):
-              print(len(data))
-          elif isinstance(data, dict) and 'tables' in data:
-              print(len(data['tables']))
-          else:
-              print(0)
-          " 2>/dev/null || echo "0")
-          
-          if [ "$TABLE_COUNT" = "0" ]; then
-            echo "::error::SYNC_TABLES_CONFIG has no tables configured"
-            exit 1
-          fi
-          echo "✓ Config valid: $TABLE_COUNT tables"
-          
-          # Redact connection URLs from output
-          ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g' || exit 1
+          # Use Rust CLI to test connectivity (redact output)
+          ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || exit 1
           echo "✓ Connectivity OK"
+
       - name: Refresh staging
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql-client -qq >/dev/null 2>&1
           psql "$DATABASE_URL" -c "CALL refresh_analytics_staging();" 2>&1 | grep -v "^$" | head -5
+
       - name: Sync
         run: |
           ARGS="sync"
           [ "${{ inputs.full_sync }}" = "true" ] && ARGS="$ARGS --full"
           
-          # Run sync, capture all output
+          # Run sync with JSON output, capture separately
           set +e
           ./motherduck-sync $ARGS --json > sync-stdout.txt 2> sync-stderr.txt
           SYNC_EXIT=$?
           set -e
           
-          # Debug: show what we got
-          echo "=== Exit code: $SYNC_EXIT ==="
-          echo "=== Stderr (first 5 lines, redacted): ==="
-          head -5 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || true
-          echo "=== Stdout size: $(wc -c < sync-stdout.txt) bytes ==="
-          echo "=== Stdout first 500 chars (redacted): ==="
-          head -c 500 sync-stdout.txt | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/"source_table": "[^"]*"/"source_table": "[redacted]"/g; s/"target_table": "[^"]*"/"target_table": "[redacted]"/g'
-          echo ""
-          echo "=== End of preview ==="
+          # Show redacted stderr
+          echo "=== Logs (redacted): ==="
+          head -10 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g; s/[a-z_]*staging[a-z_]*/[table]/g' || true
           
-          # The JSON output is pretty-printed, so we need the whole file
-          cp sync-stdout.txt sync-result-raw.json
+          # Process JSON output with sed (no Python)
+          if [ -s sync-stdout.txt ]; then
+            # Redact table names in JSON
+            sed 's/"source_table": "[^"]*"/"source_table": "[redacted]"/g; s/"target_table": "[^"]*"/"target_table": "[redacted]"/g; s/"error": "[^"]*"/"error": "[redacted]"/g' sync-stdout.txt > sync-result.json
+            
+            # Extract summary using grep/sed
+            TABLES=$(grep -o '"tables"' sync-result.json | wc -l || echo "0")
+            SUCCESS=$(grep -o '"success": true' sync-result.json | head -1 || echo "")
+            echo ""
+            if [ -n "$SUCCESS" ]; then
+              echo "✓ Sync completed successfully"
+            else
+              echo "⚠ Sync completed with issues"
+            fi
+          else
+            echo '{"error": "no output", "success": false}' > sync-result.json
+            echo "⚠ No output from sync"
+          fi
           
-          # Process and redact the JSON output
-          python3 << 'EOF'
-          import json, sys
-          try:
-              with open('sync-result-raw.json') as f:
-                  content = f.read().strip()
-              
-              if not content:
-                  print("⚠ No output from sync command")
-                  with open('sync-result.json', 'w') as f:
-                      f.write('{"error": "no output", "success": false, "tables": {}}')
-                  sys.exit(0)
-              
-              # Find JSON object in output (skip any log lines before JSON)
-              start = content.find('{')
-              if start < 0:
-                  print(f"⚠ No JSON object found in output")
-                  with open('sync-result.json', 'w') as f:
-                      f.write('{"error": "no json in output", "success": false, "tables": {}}')
-                  sys.exit(0)
-              
-              json_content = content[start:]
-              
-              # Try to parse - if it fails, show where
-              try:
-                  data = json.loads(json_content)
-              except json.JSONDecodeError as e:
-                  print(f"⚠ JSON parse error at position {e.pos}: {e.msg}")
-                  print(f"   Context: ...{json_content[max(0,e.pos-50):e.pos+50]}...")
-                  with open('sync-result.json', 'w') as f:
-                      f.write('{"error": "json parse error", "success": false, "tables": {}}')
-                  sys.exit(0)
-              # Redact table names
-              if 'tables' in data:
-                  redacted = {}
-                  for i, (k, v) in enumerate(data['tables'].items(), 1):
-                      key = f"table_{i}"
-                      v['source_table'] = f"source_{i}"
-                      v['target_table'] = f"target_{i}"
-                      if v.get('error'):
-                          v['error'] = '[redacted]'
-                      redacted[key] = v
-                  data['tables'] = redacted
-              if 'error' in data:
-                  data['error'] = '[redacted]'
-              with open('sync-result.json', 'w') as f:
-                  json.dump(data, f, indent=2)
-              # Print summary only
-              total = sum(t.get('records_synced', 0) for t in data.get('tables', {}).values())
-              failed = len([t for t in data.get('tables', {}).values() if not t.get('success', True)])
-              print(f"✓ Synced {total} records across {len(data.get('tables', {}))} tables ({failed} failed)")
-          except Exception as e:
-              print(f"⚠ Sync output processing: {type(e).__name__}")
-              with open('sync-result.json', 'w') as f:
-                  f.write('{"redacted": true}')
-          EOF
           exit $SYNC_EXIT
+
       - name: Verify
         run: |
-          # Suppress all table names in verify output
-          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/[a-z_]*_stats/[table]/g; s/[a-z_]*_summary/[table]/g; s/[a-z_]*_activity[a-z_]*/[table]/g' | grep -E "(Total|records)" || echo "✓ Verify complete"
+          # Use Rust CLI to verify counts (redact table names)
+          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/[a-z_]*_stats/[table]/g' | grep -E "(Total|records|→)" || echo "✓ Verify complete"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sync-result-${{ github.run_id }}
           path: sync-result.json
           retention-days: 30
+
       - name: Summary
         if: always()
         run: |
           echo "## 🦆 Sync Complete" >> $GITHUB_STEP_SUMMARY
           if [ -f sync-result.json ]; then
-            # Show redacted summary
-            python3 << 'EOF' >> $GITHUB_STEP_SUMMARY
-          import json
-          try:
-              with open('sync-result.json') as f:
-                  data = json.load(f)
-              total = sum(t.get('records_synced', 0) for t in data.get('tables', {}).values())
-              success = data.get('success', False)
-              tables = len(data.get('tables', {}))
-              failed = len([t for t in data.get('tables', {}).values() if not t.get('success', True)])
-              print(f"| Metric | Value |")
-              print(f"|--------|-------|")
-              print(f"| Status | {'✅ Success' if success else '⚠️ Partial'} |")
-              print(f"| Tables | {tables} |")
-              print(f"| Records | {total:,} |")
-              print(f"| Failed | {failed} |")
-          except:
-              print("_Results redacted_")
-          EOF
+            # Extract metrics using grep/sed (no Python)
+            SUCCESS=$(grep -o '"success": true' sync-result.json | head -1 && echo "✅ Success" || echo "⚠️ Partial")
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            if grep -q '"success": true' sync-result.json; then
+              echo "| Status | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Status | ⚠️ Partial |" >> $GITHUB_STEP_SUMMARY
+            fi
+            # Count tables from JSON structure
+            TABLES=$(grep -c '"records_synced"' sync-result.json 2>/dev/null || echo "0")
+            echo "| Tables | $TABLES |" >> $GITHUB_STEP_SUMMARY
           fi
