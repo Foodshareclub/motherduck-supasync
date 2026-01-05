@@ -82,7 +82,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    init_logging(&cli.log_level, cli.quiet);
+    init_logging(&cli.log_level, cli.quiet, cli.json);
 
     match run(cli).await {
         Ok(_) => ExitCode::SUCCESS,
@@ -556,10 +556,20 @@ enabled = true
     Ok(())
 }
 
-fn init_logging(level: &str, quiet: bool) {
+fn init_logging(level: &str, quiet: bool, json_output: bool) {
     if quiet {
         return;
     }
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
-    fmt().with_env_filter(filter).with_target(false).init();
+    
+    // When JSON output is enabled, send logs to stderr to avoid mixing with JSON on stdout
+    if json_output {
+        fmt()
+            .with_env_filter(filter)
+            .with_target(false)
+            .with_writer(std::io::stderr)
+            .init();
+    } else {
+        fmt().with_env_filter(filter).with_target(false).init();
+    }
 }
