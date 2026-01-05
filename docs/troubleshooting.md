@@ -64,7 +64,7 @@ export SYNC_TABLES_JSON='[{"source":"table","target":"table","pk":["id"]}]'
 
 **Fix:** Regenerate the secret:
 ```bash
-motherduck-sync generate-secret --input tables.local.json
+motherduck-supasync generate-secret --input tables.local.json
 ```
 
 **Verify:**
@@ -105,9 +105,9 @@ Common issues:
 - Wrong sync flag column
 
 **Fix:**
-1. Check unsynced count: `motherduck-sync status`
+1. Check unsynced count: `motherduck-supasync status`
 2. Verify sync flag: `SELECT COUNT(*) FROM table WHERE synced_to_motherduck = false;`
-3. For full resync: `motherduck-sync sync --full`
+3. For full resync: `motherduck-supasync sync --full`
 
 ### Slow sync performance
 
@@ -162,7 +162,7 @@ pool_size = 10
 Enable verbose logging:
 
 ```bash
-motherduck-sync --log-level debug sync
+motherduck-supasync --log-level debug sync
 ```
 
 ## Verify Configuration
@@ -176,10 +176,10 @@ echo "MOTHERDUCK_TOKEN: ${MOTHERDUCK_TOKEN:0:10}..."
 echo $SYNC_TABLES_CONFIG | base64 -d | jq .
 
 # Test connectivity
-motherduck-sync test
+motherduck-supasync test
 
 # Check unsynced counts
-motherduck-sync status
+motherduck-supasync status
 ```
 
 ## Common Error Messages
@@ -198,5 +198,5 @@ motherduck-sync status
 
 1. Check logs with `--log-level debug`
 2. Verify config with `echo $SYNC_TABLES_CONFIG | base64 -d`
-3. Test connectivity with `motherduck-sync test`
+3. Test connectivity with `motherduck-supasync test`
 4. Open an issue with error message and config (redact secrets!)

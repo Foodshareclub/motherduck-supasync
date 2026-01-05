@@ -11,8 +11,8 @@
 ### From Source
 
 ```bash
-git clone https://github.com/Foodshareclub/motherduck-sync
-cd motherduck-sync
+git clone https://github.com/Foodshareclub/motherduck-supasync
+cd motherduck-supasync
 cargo install --path .
 ```
 
@@ -20,7 +20,7 @@ cargo install --path .
 
 ```bash
 cargo build --release
-# Binary at: target/release/motherduck-sync
+# Binary at: target/release/motherduck-supasync
 ```
 
 ## Quick Setup
@@ -82,13 +82,13 @@ export SYNC_TABLES_CONFIG="$(cat tables.local.json | base64)"
 
 ```bash
 # Test connectivity
-motherduck-sync test
+motherduck-supasync test
 
 # Check what needs syncing
-motherduck-sync status
+motherduck-supasync status
 
 # Run sync
-motherduck-sync sync
+motherduck-supasync sync
 ```
 
 ## Next Steps

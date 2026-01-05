@@ -57,7 +57,7 @@ MotherDuck Sync supports three configuration methods:
 Use the built-in command:
 
 ```bash
-motherduck-sync generate-secret --input tables.local.json
+motherduck-supasync generate-secret --input tables.local.json
 ```
 
 Output:
@@ -142,7 +142,7 @@ cat tables.local.json | jq -c | base64
 For complex setups, generate a TOML config:
 
 ```bash
-motherduck-sync init --output motherduck-sync.toml
+motherduck-supasync init --output motherduck-supasync.toml
 ```
 
 ### Full TOML Reference
@@ -198,7 +198,7 @@ enabled = true
 ### Using TOML Config
 
 ```bash
-motherduck-sync --config motherduck-sync.toml sync
+motherduck-supasync --config motherduck-supasync.toml sync
 ```
 
 ## Configuration Priority

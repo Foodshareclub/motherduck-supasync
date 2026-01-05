@@ -16,7 +16,7 @@
 MotherDuck Sync is a Rust CLI for syncing data from PostgreSQL (Supabase) to MotherDuck for analytics.
 
 ```
-PostgreSQL/Supabase  →  motherduck-sync  →  MotherDuck (DuckDB)
+PostgreSQL/Supabase  →  motherduck-supasync  →  MotherDuck (DuckDB)
      (source)              (this tool)         (analytics)
 ```
 

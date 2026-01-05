@@ -15,7 +15,7 @@ cargo build --release          # Release build (optimized, LTO enabled)
 
 # Run CLI
 cargo run -- <command>         # Run with cargo
-motherduck-sync <command>      # After cargo install --path .
+motherduck-supasync <command>      # After cargo install --path .
 
 # Tests
 cargo test                     # Run all tests
@@ -55,11 +55,11 @@ src/
 ## Configuration System
 
 Three config sources (in order of precedence):
-1. **TOML file**: `motherduck-sync.toml` or `--config path`
+1. **TOML file**: `motherduck-supasync.toml` or `--config path`
 2. **Environment variables**: `DATABASE_URL`, `MOTHERDUCK_TOKEN`
 3. **Table configs**: `SYNC_TABLES_CONFIG` (base64-encoded JSON) or `SYNC_TABLES_JSON` (plain JSON for local dev)
 
-Generate secrets: `motherduck-sync generate-secret --input tables.local.json`
+Generate secrets: `motherduck-supasync generate-secret --input tables.local.json`
 
 ## Key Types
 

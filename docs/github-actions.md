@@ -24,7 +24,7 @@ cp tables.example.json tables.local.json
 # Edit tables.local.json with your tables
 
 # Generate the secret
-motherduck-sync generate-secret --input tables.local.json
+motherduck-supasync generate-secret --input tables.local.json
 ```
 
 Copy the output and paste as `SYNC_TABLES_CONFIG` secret value.
@@ -84,7 +84,7 @@ on:
           - warn
 
 concurrency:
-  group: motherduck-sync
+  group: motherduck-supasync
   cancel-in-progress: false
 
 env:
@@ -120,7 +120,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
           SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
-        run: ./target/release/motherduck-sync test
+        run: ./target/release/motherduck-supasync test
         
       - name: Run sync
         env:
@@ -130,9 +130,9 @@ jobs:
           LOG_LEVEL: ${{ inputs.log_level || 'info' }}
         run: |
           if [ "${{ inputs.sync_mode }}" = "full" ]; then
-            ./target/release/motherduck-sync sync --full
+            ./target/release/motherduck-supasync sync --full
           else
-            ./target/release/motherduck-sync sync
+            ./target/release/motherduck-supasync sync
           fi
 ```
 

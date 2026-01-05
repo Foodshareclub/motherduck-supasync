@@ -3,7 +3,7 @@
 ## Synopsis
 
 ```
-motherduck-sync [OPTIONS] <COMMAND>
+motherduck-supasync [OPTIONS] <COMMAND>
 ```
 
 ## Global Options
@@ -26,13 +26,13 @@ Run data synchronization (default command).
 
 ```bash
 # Incremental sync (only unsynced records)
-motherduck-sync sync
+motherduck-supasync sync
 
 # Full sync (all records)
-motherduck-sync sync --full
+motherduck-supasync sync --full
 
 # With custom config
-motherduck-sync --config my-config.toml sync
+motherduck-supasync --config my-config.toml sync
 ```
 
 ### test
@@ -40,10 +40,10 @@ motherduck-sync --config my-config.toml sync
 Test connectivity to PostgreSQL and MotherDuck.
 
 ```bash
-motherduck-sync test
+motherduck-supasync test
 
 # JSON output
-motherduck-sync test --json
+motherduck-supasync test --json
 ```
 
 Output:
@@ -61,10 +61,10 @@ Testing connectivity...
 Show count of unsynced records per table.
 
 ```bash
-motherduck-sync status
+motherduck-supasync status
 
 # JSON output
-motherduck-sync status --json
+motherduck-supasync status --json
 ```
 
 Output:
@@ -83,14 +83,14 @@ Query MotherDuck tables directly.
 
 ```bash
 # List all tables
-motherduck-sync query --tables
+motherduck-supasync query --tables
 
 # Show row counts
-motherduck-sync query --counts
+motherduck-supasync query --counts
 
 # Execute custom SQL
-motherduck-sync query --sql "SELECT COUNT(*) FROM full_users"
-motherduck-sync query --sql "SELECT * FROM daily_stats LIMIT 5"
+motherduck-supasync query --sql "SELECT COUNT(*) FROM full_users"
+motherduck-supasync query --sql "SELECT * FROM daily_stats LIMIT 5"
 ```
 
 ### clean
@@ -99,13 +99,13 @@ Clean/reset MotherDuck tables.
 
 ```bash
 # Truncate all tables (keep structure)
-motherduck-sync clean --truncate
+motherduck-supasync clean --truncate
 
 # Truncate specific table
-motherduck-sync clean --truncate -t daily_stats
+motherduck-supasync clean --truncate -t daily_stats
 
 # Drop and recreate tables
-motherduck-sync clean --reset
+motherduck-supasync clean --reset
 ```
 
 ### init
@@ -113,8 +113,8 @@ motherduck-sync clean --reset
 Generate a sample TOML configuration file.
 
 ```bash
-motherduck-sync init
-motherduck-sync init --output my-config.toml
+motherduck-supasync init
+motherduck-supasync init --output my-config.toml
 ```
 
 ### generate-secret
@@ -123,10 +123,10 @@ Generate base64-encoded secret from JSON file.
 
 ```bash
 # Default: tables.local.json
-motherduck-sync generate-secret
+motherduck-supasync generate-secret
 
 # Custom input file
-motherduck-sync generate-secret --input my-tables.json
+motherduck-supasync generate-secret --input my-tables.json
 ```
 
 Output:
@@ -147,46 +147,46 @@ W3sic291cmNlIjoiYW5hbHl0aWNzX3N0YWdpbmdfdXNlcnMi...
 
 ```bash
 # 1. Test connectivity
-motherduck-sync test
+motherduck-supasync test
 
 # 2. Check what needs syncing
-motherduck-sync status
+motherduck-supasync status
 
 # 3. Run incremental sync
-motherduck-sync sync
+motherduck-supasync sync
 
 # 4. Verify results
-motherduck-sync query --counts
+motherduck-supasync query --counts
 ```
 
 ### Full Resync
 
 ```bash
 # Clear existing data
-motherduck-sync clean --truncate
+motherduck-supasync clean --truncate
 
 # Resync everything
-motherduck-sync sync --full
+motherduck-supasync sync --full
 ```
 
 ### Debug Mode
 
 ```bash
 # Verbose logging
-motherduck-sync --log-level debug sync
+motherduck-supasync --log-level debug sync
 
 # JSON output for parsing
-motherduck-sync --json status
+motherduck-supasync --json status
 ```
 
 ### CI/CD Usage
 
 ```bash
 # Quiet mode for CI
-motherduck-sync -q sync
+motherduck-supasync -q sync
 
 # JSON output for parsing
-motherduck-sync --json sync
+motherduck-supasync --json sync
 ```
 
 ## Exit Codes
