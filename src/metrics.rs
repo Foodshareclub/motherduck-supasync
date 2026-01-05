@@ -94,14 +94,23 @@ impl Metrics {
 /// Snapshot of metrics at a point in time.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MetricsSnapshot {
+    /// Total syncs attempted
     pub syncs_total: u64,
+    /// Successful syncs
     pub syncs_success: u64,
+    /// Failed syncs
     pub syncs_failed: u64,
+    /// Total records synced
     pub records_synced: u64,
+    /// Total records failed
     pub records_failed: u64,
+    /// Total sync duration in milliseconds
     pub sync_duration_ms: u64,
+    /// PostgreSQL query count
     pub pg_queries: u64,
+    /// MotherDuck query count
     pub md_queries: u64,
+    /// Retry count
     pub retries: u64,
 }
 

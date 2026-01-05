@@ -193,9 +193,17 @@ pub enum ColumnType {
     /// Double precision float
     Double,
     /// Decimal/Numeric with precision and scale
-    Decimal { precision: u8, scale: u8 },
+    Decimal {
+        /// Precision (total digits)
+        precision: u8,
+        /// Scale (digits after decimal)
+        scale: u8,
+    },
     /// Variable-length string
-    Varchar { max_length: Option<u32> },
+    Varchar {
+        /// Maximum length (None = unlimited)
+        max_length: Option<u32>,
+    },
     /// Text (unlimited length)
     Text,
     /// Date

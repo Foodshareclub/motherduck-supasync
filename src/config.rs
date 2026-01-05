@@ -114,9 +114,12 @@ impl Default for PostgresConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SslMode {
+    /// Disable SSL
     Disable,
+    /// Prefer SSL (default)
     #[default]
     Prefer,
+    /// Require SSL
     Require,
 }
 
@@ -265,56 +268,67 @@ pub struct TableMappingBuilder {
 }
 
 impl TableMappingBuilder {
+    /// Set source table name.
     pub fn source_table(mut self, name: impl Into<String>) -> Self {
         self.source_table = Some(name.into());
         self
     }
 
+    /// Set target table name.
     pub fn target_table(mut self, name: impl Into<String>) -> Self {
         self.target_table = Some(name.into());
         self
     }
 
+    /// Set primary key columns.
     pub fn primary_key(mut self, cols: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.primary_key = cols.into_iter().map(|c| c.into()).collect();
         self
     }
 
+    /// Set single primary key column.
     pub fn primary_key_column(mut self, col: impl Into<String>) -> Self {
         self.primary_key = vec![col.into()];
         self
     }
 
+    /// Set sync flag column name.
     pub fn sync_flag_column(mut self, col: impl Into<String>) -> Self {
         self.sync_flag_column = Some(col.into());
         self
     }
 
+    /// Set columns to sync.
     pub fn columns(mut self, cols: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.columns = cols.into_iter().map(|c| c.into()).collect();
         self
     }
 
+    /// Add column mapping (source -> target).
     pub fn map_column(mut self, src: impl Into<String>, tgt: impl Into<String>) -> Self {
         self.column_mappings.insert(src.into(), tgt.into());
         self
     }
 
+    /// Set filter clause.
     pub fn filter(mut self, f: impl Into<String>) -> Self {
         self.filter = Some(f.into());
         self
     }
 
+    /// Set order by clause.
     pub fn order_by(mut self, o: impl Into<String>) -> Self {
         self.order_by = Some(o.into());
         self
     }
 
+    /// Set enabled flag.
     pub fn enabled(mut self, e: bool) -> Self {
         self.enabled = e;
         self
     }
 
+    /// Build the TableMapping.
     pub fn build(self) -> Result<TableMapping> {
         let source = self
             .source_table
@@ -377,10 +391,12 @@ impl Default for RetryConfig {
 }
 
 impl RetryConfig {
+    /// Get initial backoff duration.
     pub fn initial_backoff(&self) -> Duration {
         Duration::from_millis(self.initial_backoff_ms)
     }
 
+    /// Get max backoff duration.
     pub fn max_backoff(&self) -> Duration {
         Duration::from_millis(self.max_backoff_ms)
     }
@@ -416,8 +432,10 @@ impl Default for LoggingConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
+    /// Plain text format (default)
     #[default]
     Text,
+    /// JSON format
     Json,
 }
 
@@ -436,51 +454,61 @@ pub struct SyncConfigBuilder {
 }
 
 impl SyncConfigBuilder {
+    /// Set PostgreSQL connection URL.
     pub fn postgres_url(mut self, url: impl Into<String>) -> Self {
         self.postgres_url = Some(url.into());
         self
     }
 
+    /// Set PostgreSQL connection pool size.
     pub fn postgres_pool_size(mut self, size: u32) -> Self {
         self.postgres_pool_size = Some(size);
         self
     }
 
+    /// Set MotherDuck access token.
     pub fn motherduck_token(mut self, token: impl Into<String>) -> Self {
         self.motherduck_token = Some(token.into());
         self
     }
 
+    /// Set MotherDuck database name.
     pub fn motherduck_database(mut self, db: impl Into<String>) -> Self {
         self.motherduck_database = Some(db.into());
         self
     }
 
+    /// Set MotherDuck schema name.
     pub fn motherduck_schema(mut self, schema: impl Into<String>) -> Self {
         self.motherduck_schema = Some(schema.into());
         self
     }
 
+    /// Set batch size for inserts.
     pub fn batch_size(mut self, size: usize) -> Self {
         self.batch_size = Some(size);
         self
     }
 
+    /// Set max retry attempts.
     pub fn max_retries(mut self, retries: u32) -> Self {
         self.max_retries = Some(retries);
         self
     }
 
+    /// Add a table mapping.
     pub fn table(mut self, mapping: TableMapping) -> Self {
         self.tables.push(mapping);
         self
     }
 
+    /// Set log level.
     pub fn log_level(mut self, level: impl Into<String>) -> Self {
         self.log_level = Some(level.into());
         self
     }
 
+    /// Build the SyncConfig.
     pub fn build(self) -> Result<SyncConfig> {
         let pg_url = self
             .postgres_url
