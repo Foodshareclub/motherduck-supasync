@@ -169,22 +169,40 @@ jobs:
         run: |
           ARGS="sync"
           [ "${{ inputs.full_sync }}" = "true" ] && ARGS="$ARGS --full"
-          # Run sync, capture exit code, separate logs from JSON
+          
+          # Run sync, capture all output
           set +e
-          ./motherduck-sync $ARGS --json 2>sync-logs.txt | tail -1 > sync-result-raw.json
+          ./motherduck-sync $ARGS --json > sync-stdout.txt 2> sync-stderr.txt
           SYNC_EXIT=$?
           set -e
-          # Redact table names from output (replace with table_1, table_2, etc)
+          
+          # Debug: show what we got (redacted)
+          echo "=== Exit code: $SYNC_EXIT ==="
+          echo "=== Stderr (first 10 lines, redacted): ==="
+          head -10 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || true
+          echo "=== Stdout size: $(wc -c < sync-stdout.txt) bytes ==="
+          
+          # Get the last line (should be JSON result)
+          tail -1 sync-stdout.txt > sync-result-raw.json
+          
+          # Process and redact the JSON output
           python3 << 'EOF'
           import json, sys
           try:
               with open('sync-result-raw.json') as f:
                   content = f.read().strip()
-                  # Find JSON object in output
-                  start = content.find('{')
-                  if start >= 0:
-                      content = content[start:]
-                  data = json.loads(content)
+              
+              if not content:
+                  print("⚠ No output from sync command")
+                  with open('sync-result.json', 'w') as f:
+                      f.write('{"error": "no output", "success": false, "tables": {}}')
+                  sys.exit(0)
+              
+              # Find JSON object in output
+              start = content.find('{')
+              if start >= 0:
+                  content = content[start:]
+              data = json.loads(content)
               # Redact table names
               if 'tables' in data:
                   redacted = {}
