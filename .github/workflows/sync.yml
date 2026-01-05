@@ -5,7 +5,7 @@
 # ║  Schedule: 3x daily (morning, midday, evening UTC)                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-name: 🦆 MotherDuck Sync
+name: 🦆 MotherDuck SupaSync
 
 on:
   schedule:
