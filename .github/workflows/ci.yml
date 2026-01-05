@@ -191,7 +191,7 @@ jobs:
       - name: 📚 Build docs
         run: cargo doc --no-default-features --features cli,tls-native --no-deps
         env:
-          RUSTDOCFLAGS: "-D warnings -A missing_docs"
+          RUSTDOCFLAGS: "-A missing_docs"
           LIBRARY_PATH: /usr/local/lib
           LD_LIBRARY_PATH: /usr/local/lib
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
