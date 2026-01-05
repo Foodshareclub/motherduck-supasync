@@ -668,10 +668,16 @@ pub fn tables_from_env() -> Result<Vec<TableMapping>> {
 fn default_tables() -> Vec<TableMapping> {
     // Try to load from environment first
     match tables_from_env() {
-        Ok(tables) if !tables.is_empty() => tables,
-        _ => {
-            // No tables configured - return empty
-            // In production, SYNC_TABLES_CONFIG must be set
+        Ok(tables) if !tables.is_empty() => {
+            tracing::info!("Loaded {} tables from SYNC_TABLES_CONFIG", tables.len());
+            tables
+        }
+        Ok(_) => {
+            tracing::warn!("SYNC_TABLES_CONFIG returned empty tables");
+            vec![]
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load tables from env: {}", e);
             vec![]
         }
     }
