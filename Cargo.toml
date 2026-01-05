@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["duckdb", "motherduck", "supabase", "sync", "analytics"]
 categories = ["command-line-utilities", "database"]
 rust-version = "1.85"
-description = "A robust CLI and library for syncing data from Supabase to MotherDuck"
+description = "A Rust CLI for syncing PostgreSQL or Supabase data to MotherDuck for analytics"
 
 [lib]
 name = "motherduck_sync"
