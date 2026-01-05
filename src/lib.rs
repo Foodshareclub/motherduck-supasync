@@ -1,6 +1,6 @@
-//! # MotherDuck Sync
+//! # MotherDuck SupaSync
 //!
-//! A robust library for syncing data from PostgreSQL to MotherDuck.
+//! A robust Rust library for syncing Supabase PostgreSQL data to MotherDuck for analytics.
 //!
 //! ## Features
 //!
