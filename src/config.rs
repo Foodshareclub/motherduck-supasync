@@ -635,8 +635,16 @@ impl From<TableConfig> for TableMapping {
     }
 }
 
+/// Wrapper struct for object format: `{"tables": [...]}`
+#[derive(Debug, Deserialize)]
+struct TablesWrapper {
+    tables: Vec<TableConfig>,
+}
+
 /// Load table mappings from SYNC_TABLES_CONFIG environment variable.
-/// Expects base64-encoded JSON array of TableConfig objects.
+/// Expects base64-encoded JSON - supports both formats:
+/// - Array format: `[{...}, {...}]`
+/// - Object format: `{"tables": [{...}, {...}]}`
 /// Falls back to empty vec if not set (requires config to be provided).
 pub fn tables_from_env() -> Result<Vec<TableMapping>> {
     let config_str = match std::env::var("SYNC_TABLES_CONFIG") {
@@ -659,10 +667,20 @@ pub fn tables_from_env() -> Result<Vec<TableMapping>> {
         }
     };
 
-    let configs: Vec<TableConfig> = serde_json::from_str(&config_str)
-        .map_err(|e| Error::config(format!("Failed to parse table config JSON: {}", e)))?;
+    // Try array format first: [{...}, {...}]
+    if let Ok(configs) = serde_json::from_str::<Vec<TableConfig>>(&config_str) {
+        return Ok(configs.into_iter().map(TableMapping::from).collect());
+    }
 
-    Ok(configs.into_iter().map(TableMapping::from).collect())
+    // Try object format: {"tables": [{...}, {...}]}
+    if let Ok(wrapper) = serde_json::from_str::<TablesWrapper>(&config_str) {
+        return Ok(wrapper.tables.into_iter().map(TableMapping::from).collect());
+    }
+
+    // Neither format worked
+    Err(Error::config(
+        "Failed to parse table config JSON: expected array [...] or object {\"tables\": [...]}",
+    ))
 }
 
 fn default_tables() -> Vec<TableMapping> {
@@ -686,6 +704,7 @@ fn default_tables() -> Vec<TableMapping> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{Engine, engine::general_purpose::STANDARD};
 
     #[test]
     fn test_config_builder() {
@@ -712,5 +731,75 @@ mod tests {
 
         assert_eq!(mapping.source_table, "source");
         assert_eq!(mapping.target_table, "target");
+    }
+
+    #[test]
+    fn test_parse_table_config_array_format() {
+        // Array format: [{...}, {...}]
+        let json = r#"[{"source":"test_table","target":"test_target","pk":["id"],"enabled":true}]"#;
+        
+        // Test array parsing directly
+        let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse array");
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].source, "test_table");
+        assert_eq!(configs[0].target, "test_target");
+    }
+
+    #[test]
+    fn test_parse_table_config_object_format() {
+        // Object format: {"tables": [{...}, {...}]}
+        let json = r#"{"tables":[{"source":"test_table","target":"test_target","pk":["id"],"enabled":true}]}"#;
+        
+        // Test object parsing directly
+        let wrapper: TablesWrapper = serde_json::from_str(json).expect("Should parse object");
+        assert_eq!(wrapper.tables.len(), 1);
+        assert_eq!(wrapper.tables[0].source, "test_table");
+        assert_eq!(wrapper.tables[0].target, "test_target");
+    }
+
+    #[test]
+    fn test_base64_decode_array_format() {
+        let json = r#"[{"source":"test","target":"test","pk":["id"]}]"#;
+        let b64 = STANDARD.encode(json);
+        
+        let decoded = STANDARD.decode(&b64).expect("Should decode base64");
+        let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
+        let configs: Vec<TableConfig> = serde_json::from_str(&decoded_str).expect("Should parse");
+        
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].source, "test");
+    }
+
+    #[test]
+    fn test_base64_decode_object_format() {
+        let json = r#"{"tables":[{"source":"test","target":"test","pk":["id"]}]}"#;
+        let b64 = STANDARD.encode(json);
+        
+        let decoded = STANDARD.decode(&b64).expect("Should decode base64");
+        let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
+        let wrapper: TablesWrapper = serde_json::from_str(&decoded_str).expect("Should parse");
+        
+        assert_eq!(wrapper.tables.len(), 1);
+        assert_eq!(wrapper.tables[0].source, "test");
+    }
+
+    #[test]
+    fn test_table_config_to_mapping() {
+        let config = TableConfig {
+            source: "src_table".to_string(),
+            target: "tgt_table".to_string(),
+            pk: vec!["id".to_string()],
+            columns: vec![],
+            mappings: std::collections::HashMap::new(),
+            order_by: None,
+            filter: None,
+            enabled: true,
+        };
+        
+        let mapping: TableMapping = config.into();
+        assert_eq!(mapping.source_table, "src_table");
+        assert_eq!(mapping.target_table, "tgt_table");
+        assert_eq!(mapping.primary_key, vec!["id"]);
+        assert!(mapping.enabled);
     }
 }
