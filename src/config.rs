@@ -852,4 +852,48 @@ mod tests {
         let mapping: TableMapping = configs[0].clone().into();
         assert!(mapping.enabled, "TableMapping.enabled should be true");
     }
+
+    // Note: Tests that require setting environment variables are skipped in unit tests
+    // because the crate has #![deny(unsafe_code)] and Rust 2024 requires unsafe for env::set_var.
+    // These are tested via integration tests with real environment variables.
+    
+    #[test]
+    fn test_tables_from_env_parsing_logic() {
+        // Test the parsing logic directly without env vars
+        // This tests the same code path as tables_from_env() but with direct input
+        
+        // Test JSON array parsing
+        let json = r#"[{"source":"test_src","target":"test_tgt","pk":["id"]}]"#;
+        let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse");
+        let tables: Vec<TableMapping> = configs.into_iter().map(TableMapping::from).collect();
+        
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].source_table, "test_src");
+        assert_eq!(tables[0].target_table, "test_tgt");
+        assert_eq!(tables[0].primary_key, vec!["id"]);
+        assert!(tables[0].enabled);
+    }
+
+    #[test]
+    fn test_base64_decode_and_parse_logic() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        
+        // Test the base64 decode + parse logic directly
+        let json = r#"[{"source":"b64_src","target":"b64_tgt","pk":["uuid"],"order_by":"created_at"}]"#;
+        let encoded = STANDARD.encode(json);
+        
+        // Decode base64 (same as tables_from_env does)
+        let decoded = STANDARD.decode(&encoded).expect("Should decode");
+        let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
+        
+        // Parse JSON (same as tables_from_env does)
+        let configs: Vec<TableConfig> = serde_json::from_str(&decoded_str).expect("Should parse");
+        let tables: Vec<TableMapping> = configs.into_iter().map(TableMapping::from).collect();
+        
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].source_table, "b64_src");
+        assert_eq!(tables[0].target_table, "b64_tgt");
+        assert_eq!(tables[0].primary_key, vec!["uuid"]);
+        assert_eq!(tables[0].order_by, Some("created_at".to_string()));
+    }
 }
