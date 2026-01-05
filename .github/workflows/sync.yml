@@ -107,11 +107,23 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
       SYNC_TABLES_CONFIG: ${{ secrets.SYNC_TABLES_CONFIG }}
+      DUCKDB_VERSION: "1.1.3"
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: motherduck-sync-${{ github.sha }}
+      
+      - name: 🦆 Install DuckDB library
+        run: |
+          # The binary is dynamically linked - need libduckdb.so at runtime
+          wget -q "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/libduckdb-linux-amd64.zip"
+          unzip -q libduckdb-linux-amd64.zip -d duckdb-lib
+          sudo cp duckdb-lib/libduckdb.so /usr/local/lib/
+          sudo ldconfig
+          echo "✅ DuckDB ${DUCKDB_VERSION} runtime installed"
+      
       - run: chmod +x motherduck-sync
+      
       - name: Test connectivity
         run: |
           # Check if config is valid
@@ -120,13 +132,26 @@ jobs:
             exit 1
           fi
           
-          # Decode and validate config
+          # Decode and validate config (expects JSON array, not {"tables": [...]})
           echo "$SYNC_TABLES_CONFIG" | base64 -d > /tmp/tables.json 2>/dev/null || {
             echo "::error::SYNC_TABLES_CONFIG is not valid base64"
             exit 1
           }
           
-          TABLE_COUNT=$(python3 -c "import json; print(len(json.load(open('/tmp/tables.json')).get('tables', [])))" 2>/dev/null || echo "0")
+          # Parse as array directly (format: [{...}, {...}])
+          TABLE_COUNT=$(python3 -c "
+          import json
+          with open('/tmp/tables.json') as f:
+              data = json.load(f)
+          # Handle both array format and object format
+          if isinstance(data, list):
+              print(len(data))
+          elif isinstance(data, dict) and 'tables' in data:
+              print(len(data['tables']))
+          else:
+              print(0)
+          " 2>/dev/null || echo "0")
+          
           if [ "$TABLE_COUNT" = "0" ]; then
             echo "::error::SYNC_TABLES_CONFIG has no tables configured"
             exit 1
