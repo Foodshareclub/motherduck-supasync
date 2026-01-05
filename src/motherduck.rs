@@ -79,89 +79,13 @@ impl MotherDuckClient {
     }
 
     /// Create default analytics tables.
+    /// DEPRECATED: Use create_table_from_schema instead for dynamic table creation.
+    /// This is kept for backward compatibility with aggregated analytics tables.
     pub fn create_analytics_tables(&self) -> Result<()> {
         self.conn
             .execute_batch(
                 r#"
-            -- Raw data tables for analytics queries
-            CREATE TABLE IF NOT EXISTS full_users (
-                id VARCHAR PRIMARY KEY,
-                nickname VARCHAR,
-                email VARCHAR,
-                avatar_url VARCHAR,
-                bio TEXT,
-                is_active BOOLEAN DEFAULT true,
-                is_verified BOOLEAN DEFAULT false,
-                last_seen_at TIMESTAMP,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS full_listings (
-                id INTEGER PRIMARY KEY,
-                profile_id VARCHAR,
-                post_name VARCHAR,
-                post_description TEXT,
-                post_type VARCHAR,
-                post_address VARCHAR,
-                latitude DOUBLE,
-                longitude DOUBLE,
-                is_active BOOLEAN DEFAULT true,
-                is_arranged BOOLEAN DEFAULT false,
-                post_arranged_to VARCHAR,
-                post_arranged_at TIMESTAMP,
-                post_views INTEGER DEFAULT 0,
-                post_like_counter INTEGER DEFAULT 0,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS full_rooms (
-                id VARCHAR PRIMARY KEY,
-                post_id INTEGER,
-                sharer_id VARCHAR,
-                requester_id VARCHAR,
-                status VARCHAR,
-                last_message_at TIMESTAMP,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS full_reviews (
-                id VARCHAR PRIMARY KEY,
-                reviewer_id VARCHAR,
-                post_id INTEGER,
-                rating INTEGER,
-                review_type VARCHAR,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS full_favorites (
-                id VARCHAR PRIMARY KEY,
-                user_id VARCHAR,
-                post_id INTEGER,
-                created_at TIMESTAMP
-            );
-
-            -- Events table for tracking
-            CREATE TABLE IF NOT EXISTS events (
-                id VARCHAR PRIMARY KEY,
-                event_name VARCHAR,
-                user_id VARCHAR,
-                properties JSON,
-                timestamp TIMESTAMP
-            );
-
-            -- Sync metadata
-            CREATE TABLE IF NOT EXISTS sync_metadata (
-                table_name VARCHAR PRIMARY KEY,
-                last_sync_at TIMESTAMP,
-                records_synced INTEGER,
-                sync_mode VARCHAR
-            );
-
-            -- Aggregated analytics tables
+            -- Aggregated analytics tables (not synced from PostgreSQL)
             CREATE TABLE IF NOT EXISTS daily_stats (
                 date DATE PRIMARY KEY,
                 new_users INTEGER,
@@ -193,12 +117,95 @@ impl MotherDuckClient {
                 total_likes INTEGER,
                 updated_at TIMESTAMP
             );
+
+            -- Events table for tracking
+            CREATE TABLE IF NOT EXISTS events (
+                id VARCHAR PRIMARY KEY,
+                event_name VARCHAR,
+                user_id VARCHAR,
+                properties JSON,
+                timestamp TIMESTAMP
+            );
+
+            -- Sync metadata
+            CREATE TABLE IF NOT EXISTS sync_metadata (
+                table_name VARCHAR PRIMARY KEY,
+                last_sync_at TIMESTAMP,
+                records_synced INTEGER,
+                sync_mode VARCHAR
+            );
         "#,
             )
             .map_err(|e| Error::motherduck_query("", "Create analytics tables failed", e))?;
 
-        info!("Created/verified analytics tables");
+        info!("Created/verified aggregated analytics tables");
         Ok(())
+    }
+
+    /// Create a target table dynamically based on introspected schema.
+    /// This ensures the MotherDuck table matches the PostgreSQL source schema.
+    #[instrument(skip(self, columns), fields(table = %target_table))]
+    pub fn create_table_from_schema(
+        &self,
+        target_table: &str,
+        columns: &[crate::schema::IntrospectedColumn],
+        primary_key: &[String],
+    ) -> Result<()> {
+        use crate::schema::{Column, ColumnType, Table};
+
+        let mut table = Table::new(target_table);
+
+        for col in columns {
+            // Skip the sync flag column - it's internal to PostgreSQL
+            if col.name == "synced_to_motherduck" {
+                continue;
+            }
+
+            let column = Column::new(col.name.clone(), ColumnType::from_postgres(&col.pg_type))
+                .nullable(col.nullable);
+
+            table.add_column(column);
+        }
+
+        if !primary_key.is_empty() {
+            table.set_primary_key(primary_key.to_vec());
+        }
+
+        let ddl = table.to_duckdb_ddl();
+        debug!("Creating table with DDL: {}", ddl);
+
+        self.conn
+            .execute(&ddl, [])
+            .map_err(|e| Error::motherduck_query(target_table, "Create table from schema failed", e))?;
+
+        info!("Created/verified table from schema: {}", target_table);
+        Ok(())
+    }
+
+    /// Check if a table exists and has the expected columns.
+    pub fn table_has_columns(&self, table: &str, expected_columns: &[&str]) -> Result<bool> {
+        let query = format!(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = '{}'",
+            table
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| Error::motherduck_query(table, "Check columns failed", e))?;
+
+        let existing_columns: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| Error::motherduck_query(table, "Query columns failed", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Check if all expected columns exist
+        let all_exist = expected_columns
+            .iter()
+            .all(|col| existing_columns.iter().any(|c| c == *col));
+
+        Ok(all_exist)
     }
 
     /// Insert or replace rows using bulk VALUES syntax for better performance.

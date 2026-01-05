@@ -188,9 +188,10 @@ impl SyncClient {
         info!("Starting {} sync...", mode);
         info!("Config has {} tables", self.config.tables.len());
 
-        // Ensure MotherDuck schema and tables exist
+        // Ensure MotherDuck schema exists
         if self.config.sync.auto_create_tables {
             self.md_client.ensure_schema()?;
+            // Create aggregated analytics tables (not synced from PostgreSQL)
             self.md_client.create_analytics_tables()?;
         }
 
@@ -205,6 +206,14 @@ impl SyncClient {
             }
 
             info!("Syncing table: {} -> {}", mapping.source_table, mapping.target_table);
+
+            // Auto-create target table from source schema if enabled
+            if self.config.sync.auto_create_tables {
+                if let Err(e) = self.ensure_target_table(mapping).await {
+                    warn!("Failed to create target table {}: {}", mapping.target_table, e);
+                    // Continue anyway - table might already exist with compatible schema
+                }
+            }
 
             let table_start = Instant::now();
             let result = self.sync_table(mapping, full_sync).await;
@@ -269,6 +278,43 @@ impl SyncClient {
         }
 
         Ok(result)
+    }
+
+    /// Ensure target table exists in MotherDuck with schema matching source.
+    #[instrument(skip(self), fields(source = %mapping.source_table, target = %mapping.target_table))]
+    async fn ensure_target_table(&self, mapping: &TableMapping) -> Result<()> {
+        // Check if table already exists
+        if self.md_client.table_exists(&mapping.target_table)? {
+            debug!("Target table {} already exists", mapping.target_table);
+            return Ok(());
+        }
+
+        // Introspect source table schema from PostgreSQL
+        info!("Introspecting schema for {}", mapping.source_table);
+        let columns = self.pg_client.introspect_table(&mapping.source_table).await?;
+
+        if columns.is_empty() {
+            return Err(crate::error::Error::config(format!(
+                "Source table {} has no columns or doesn't exist",
+                mapping.source_table
+            )));
+        }
+
+        // Create target table with matching schema
+        self.md_client.create_table_from_schema(
+            &mapping.target_table,
+            &columns,
+            &mapping.primary_key,
+        )?;
+
+        info!(
+            "Created target table {} with {} columns from source {}",
+            mapping.target_table,
+            columns.len(),
+            mapping.source_table
+        );
+
+        Ok(())
     }
 
     /// Sync a single table.
