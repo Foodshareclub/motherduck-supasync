@@ -824,4 +824,32 @@ mod tests {
         assert_eq!(mapping.primary_key, vec!["id"]);
         assert!(mapping.enabled);
     }
+
+    #[test]
+    fn test_enabled_defaults_to_true() {
+        // JSON without "enabled" field should default to true
+        let json = r#"[{"source":"test","target":"test","pk":["id"]}]"#;
+        let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse");
+        assert!(configs[0].enabled, "enabled should default to true");
+    }
+
+    #[test]
+    fn test_full_tables_local_json_format() {
+        // Test the exact format from tables.local.json
+        let json = r#"[
+          {"source": "analytics_staging_users", "target": "full_users", "pk": ["id"], "order_by": "created_at"},
+          {"source": "analytics_daily_stats", "target": "daily_stats", "pk": ["date"], "order_by": "date"}
+        ]"#;
+        let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse");
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].source, "analytics_staging_users");
+        assert_eq!(configs[0].target, "full_users");
+        assert_eq!(configs[0].pk, vec!["id"]);
+        assert_eq!(configs[0].order_by, Some("created_at".to_string()));
+        assert!(configs[0].enabled, "enabled should default to true");
+        
+        // Convert to TableMapping and verify
+        let mapping: TableMapping = configs[0].clone().into();
+        assert!(mapping.enabled, "TableMapping.enabled should be true");
+    }
 }

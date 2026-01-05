@@ -186,6 +186,7 @@ impl SyncClient {
         let full_sync = mode == SyncMode::Full;
 
         info!("Starting {} sync...", mode);
+        info!("Config has {} tables", self.config.tables.len());
 
         // Ensure MotherDuck schema and tables exist
         if self.config.sync.auto_create_tables {
@@ -202,6 +203,8 @@ impl SyncClient {
                 debug!("Skipping disabled table: {}", mapping.source_table);
                 continue;
             }
+
+            info!("Syncing table: {} -> {}", mapping.source_table, mapping.target_table);
 
             let table_start = Instant::now();
             let result = self.sync_table(mapping, full_sync).await;
@@ -251,9 +254,10 @@ impl SyncClient {
 
         if overall_success {
             info!(
-                "Sync completed successfully in {}ms. Total records: {}",
+                "Sync completed successfully in {}ms. Total records: {}, Tables synced: {}",
                 duration_ms,
-                result.total_records()
+                result.total_records(),
+                result.tables.len()
             );
         } else {
             warn!(
