@@ -561,7 +561,7 @@ fn init_logging(level: &str, quiet: bool, json_output: bool) {
         return;
     }
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
-    
+
     // When JSON output is enabled, send logs to stderr to avoid mixing with JSON on stdout
     if json_output {
         fmt()

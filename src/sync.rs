@@ -205,12 +205,18 @@ impl SyncClient {
                 continue;
             }
 
-            info!("Syncing table: {} -> {}", mapping.source_table, mapping.target_table);
+            info!(
+                "Syncing table: {} -> {}",
+                mapping.source_table, mapping.target_table
+            );
 
             // Auto-create target table from source schema if enabled
             if self.config.sync.auto_create_tables {
                 if let Err(e) = self.ensure_target_table(mapping).await {
-                    warn!("Failed to create target table {}: {}", mapping.target_table, e);
+                    warn!(
+                        "Failed to create target table {}: {}",
+                        mapping.target_table, e
+                    );
                     // Continue anyway - table might already exist with compatible schema
                 }
             }
@@ -291,7 +297,10 @@ impl SyncClient {
 
         // Introspect source table schema from PostgreSQL
         info!("Introspecting schema for {}", mapping.source_table);
-        let columns = self.pg_client.introspect_table(&mapping.source_table).await?;
+        let columns = self
+            .pg_client
+            .introspect_table(&mapping.source_table)
+            .await?;
 
         if columns.is_empty() {
             return Err(crate::error::Error::config(format!(

@@ -657,9 +657,11 @@ pub fn tables_from_env() -> Result<Vec<TableMapping>> {
             let json_str = String::from_utf8(decoded).map_err(|e| {
                 Error::config(format!("SYNC_TABLES_CONFIG is not valid UTF-8: {}", e))
             })?;
-            tracing::debug!("Decoded SYNC_TABLES_CONFIG: {} bytes, starts with: {:?}", 
-                json_str.len(), 
-                json_str.chars().take(50).collect::<String>());
+            tracing::debug!(
+                "Decoded SYNC_TABLES_CONFIG: {} bytes, starts with: {:?}",
+                json_str.len(),
+                json_str.chars().take(50).collect::<String>()
+            );
             json_str
         }
         Err(_) => {
@@ -759,7 +761,7 @@ mod tests {
     fn test_parse_table_config_array_format() {
         // Array format: [{...}, {...}]
         let json = r#"[{"source":"test_table","target":"test_target","pk":["id"],"enabled":true}]"#;
-        
+
         // Test array parsing directly
         let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse array");
         assert_eq!(configs.len(), 1);
@@ -771,7 +773,7 @@ mod tests {
     fn test_parse_table_config_object_format() {
         // Object format: {"tables": [{...}, {...}]}
         let json = r#"{"tables":[{"source":"test_table","target":"test_target","pk":["id"],"enabled":true}]}"#;
-        
+
         // Test object parsing directly
         let wrapper: TablesWrapper = serde_json::from_str(json).expect("Should parse object");
         assert_eq!(wrapper.tables.len(), 1);
@@ -783,11 +785,11 @@ mod tests {
     fn test_base64_decode_array_format() {
         let json = r#"[{"source":"test","target":"test","pk":["id"]}]"#;
         let b64 = STANDARD.encode(json);
-        
+
         let decoded = STANDARD.decode(&b64).expect("Should decode base64");
         let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
         let configs: Vec<TableConfig> = serde_json::from_str(&decoded_str).expect("Should parse");
-        
+
         assert_eq!(configs.len(), 1);
         assert_eq!(configs[0].source, "test");
     }
@@ -796,11 +798,11 @@ mod tests {
     fn test_base64_decode_object_format() {
         let json = r#"{"tables":[{"source":"test","target":"test","pk":["id"]}]}"#;
         let b64 = STANDARD.encode(json);
-        
+
         let decoded = STANDARD.decode(&b64).expect("Should decode base64");
         let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
         let wrapper: TablesWrapper = serde_json::from_str(&decoded_str).expect("Should parse");
-        
+
         assert_eq!(wrapper.tables.len(), 1);
         assert_eq!(wrapper.tables[0].source, "test");
     }
@@ -817,7 +819,7 @@ mod tests {
             filter: None,
             enabled: true,
         };
-        
+
         let mapping: TableMapping = config.into();
         assert_eq!(mapping.source_table, "src_table");
         assert_eq!(mapping.target_table, "tgt_table");
@@ -847,7 +849,7 @@ mod tests {
         assert_eq!(configs[0].pk, vec!["id"]);
         assert_eq!(configs[0].order_by, Some("created_at".to_string()));
         assert!(configs[0].enabled, "enabled should default to true");
-        
+
         // Convert to TableMapping and verify
         let mapping: TableMapping = configs[0].clone().into();
         assert!(mapping.enabled, "TableMapping.enabled should be true");
@@ -856,17 +858,17 @@ mod tests {
     // Note: Tests that require setting environment variables are skipped in unit tests
     // because the crate has #![deny(unsafe_code)] and Rust 2024 requires unsafe for env::set_var.
     // These are tested via integration tests with real environment variables.
-    
+
     #[test]
     fn test_tables_from_env_parsing_logic() {
         // Test the parsing logic directly without env vars
         // This tests the same code path as tables_from_env() but with direct input
-        
+
         // Test JSON array parsing
         let json = r#"[{"source":"test_src","target":"test_tgt","pk":["id"]}]"#;
         let configs: Vec<TableConfig> = serde_json::from_str(json).expect("Should parse");
         let tables: Vec<TableMapping> = configs.into_iter().map(TableMapping::from).collect();
-        
+
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0].source_table, "test_src");
         assert_eq!(tables[0].target_table, "test_tgt");
@@ -877,19 +879,20 @@ mod tests {
     #[test]
     fn test_base64_decode_and_parse_logic() {
         use base64::{Engine, engine::general_purpose::STANDARD};
-        
+
         // Test the base64 decode + parse logic directly
-        let json = r#"[{"source":"b64_src","target":"b64_tgt","pk":["uuid"],"order_by":"created_at"}]"#;
+        let json =
+            r#"[{"source":"b64_src","target":"b64_tgt","pk":["uuid"],"order_by":"created_at"}]"#;
         let encoded = STANDARD.encode(json);
-        
+
         // Decode base64 (same as tables_from_env does)
         let decoded = STANDARD.decode(&encoded).expect("Should decode");
         let decoded_str = String::from_utf8(decoded).expect("Should be UTF-8");
-        
+
         // Parse JSON (same as tables_from_env does)
         let configs: Vec<TableConfig> = serde_json::from_str(&decoded_str).expect("Should parse");
         let tables: Vec<TableMapping> = configs.into_iter().map(TableMapping::from).collect();
-        
+
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0].source_table, "b64_src");
         assert_eq!(tables[0].target_table, "b64_tgt");

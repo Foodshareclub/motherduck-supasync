@@ -174,9 +174,9 @@ impl MotherDuckClient {
         let ddl = table.to_duckdb_ddl();
         debug!("Creating table with DDL: {}", ddl);
 
-        self.conn
-            .execute(&ddl, [])
-            .map_err(|e| Error::motherduck_query(target_table, "Create table from schema failed", e))?;
+        self.conn.execute(&ddl, []).map_err(|e| {
+            Error::motherduck_query(target_table, "Create table from schema failed", e)
+        })?;
 
         info!("Created/verified table from schema: {}", target_table);
         Ok(())
