@@ -123,7 +123,7 @@ jobs:
       
       - run: chmod +x motherduck-sync
       
-      - name: Test connectivity
+      - name: Validate config
         run: |
           # Validate config exists
           if [ -z "$SYNC_TABLES_CONFIG" ]; then
@@ -131,8 +131,41 @@ jobs:
             exit 1
           fi
           
+          # Decode and show format (first 100 chars, redacted)
+          DECODED=$(echo "$SYNC_TABLES_CONFIG" | base64 -d 2>/dev/null || echo "DECODE_FAILED")
+          if [ "$DECODED" = "DECODE_FAILED" ]; then
+            echo "::error::SYNC_TABLES_CONFIG is not valid base64"
+            exit 1
+          fi
+          
+          # Show format type
+          FIRST_CHAR=$(echo "$DECODED" | head -c1)
+          if [ "$FIRST_CHAR" = "[" ]; then
+            echo "✓ Config format: JSON array"
+          elif [ "$FIRST_CHAR" = "{" ]; then
+            echo "✓ Config format: JSON object"
+            # Check if it has "tables" key
+            if echo "$DECODED" | grep -q '"tables"'; then
+              echo "  → Has 'tables' key (object format)"
+            fi
+          else
+            echo "::error::Unknown config format (starts with: $FIRST_CHAR)"
+            exit 1
+          fi
+          
+          # Count tables using jq-like parsing with sed
+          TABLE_COUNT=$(echo "$DECODED" | grep -o '"source"' | wc -l | tr -d ' ')
+          echo "✓ Tables configured: $TABLE_COUNT"
+          
+          if [ "$TABLE_COUNT" = "0" ]; then
+            echo "::error::No tables found in config"
+            exit 1
+          fi
+
+      - name: Test connectivity
+        run: |
           # Use Rust CLI to test connectivity (redact output)
-          ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || exit 1
+          LOG_LEVEL=debug ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g; s/[a-z_]*staging[a-z_]*/[table]/g' | head -20 || exit 1
           echo "✓ Connectivity OK"
 
       - name: Refresh staging
