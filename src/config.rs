@@ -654,27 +654,49 @@ pub fn tables_from_env() -> Result<Vec<TableMapping>> {
             let decoded = STANDARD.decode(&encoded).map_err(|e| {
                 Error::config(format!("Failed to decode SYNC_TABLES_CONFIG base64: {}", e))
             })?;
-            String::from_utf8(decoded).map_err(|e| {
+            let json_str = String::from_utf8(decoded).map_err(|e| {
                 Error::config(format!("SYNC_TABLES_CONFIG is not valid UTF-8: {}", e))
-            })?
+            })?;
+            tracing::debug!("Decoded SYNC_TABLES_CONFIG: {} bytes, starts with: {:?}", 
+                json_str.len(), 
+                json_str.chars().take(50).collect::<String>());
+            json_str
         }
         Err(_) => {
             // Try plain JSON (for local dev)
             match std::env::var("SYNC_TABLES_JSON") {
-                Ok(json) => json,
-                Err(_) => return Ok(vec![]), // No config provided
+                Ok(json) => {
+                    tracing::debug!("Using SYNC_TABLES_JSON: {} bytes", json.len());
+                    json
+                }
+                Err(_) => {
+                    tracing::debug!("No SYNC_TABLES_CONFIG or SYNC_TABLES_JSON found");
+                    return Ok(vec![]);
+                }
             }
         }
     };
 
     // Try array format first: [{...}, {...}]
-    if let Ok(configs) = serde_json::from_str::<Vec<TableConfig>>(&config_str) {
-        return Ok(configs.into_iter().map(TableMapping::from).collect());
+    match serde_json::from_str::<Vec<TableConfig>>(&config_str) {
+        Ok(configs) => {
+            tracing::debug!("Parsed as array format: {} tables", configs.len());
+            return Ok(configs.into_iter().map(TableMapping::from).collect());
+        }
+        Err(e) => {
+            tracing::debug!("Array format parse failed: {}", e);
+        }
     }
 
     // Try object format: {"tables": [{...}, {...}]}
-    if let Ok(wrapper) = serde_json::from_str::<TablesWrapper>(&config_str) {
-        return Ok(wrapper.tables.into_iter().map(TableMapping::from).collect());
+    match serde_json::from_str::<TablesWrapper>(&config_str) {
+        Ok(wrapper) => {
+            tracing::debug!("Parsed as object format: {} tables", wrapper.tables.len());
+            return Ok(wrapper.tables.into_iter().map(TableMapping::from).collect());
+        }
+        Err(e) => {
+            tracing::debug!("Object format parse failed: {}", e);
+        }
     }
 
     // Neither format worked
