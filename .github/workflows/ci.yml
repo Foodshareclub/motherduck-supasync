@@ -156,7 +156,7 @@ jobs:
           
           echo "✅ DuckDB ${DUCKDB_VERSION} installed"
       
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
       
@@ -169,17 +169,32 @@ jobs:
       
       - name: 📎 Lint (clippy)
         run: cargo clippy --no-default-features --features cli,tls-native --all-targets -- -W clippy::all -A dead_code -A unused_variables -A missing_docs -A clippy::redundant_closure
+        env:
+          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
       
       - name: 🔨 Build release
         run: cargo build --no-default-features --features cli,tls-native --release
+        env:
+          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
       
       - name: ✅ Run tests
         run: cargo test --no-default-features --features cli,tls-native --no-fail-fast
+        env:
+          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
       
       - name: 📚 Build docs
         run: cargo doc --no-default-features --features cli,tls-native --no-deps
         env:
           RUSTDOCFLAGS: "-D warnings -A missing_docs"
+          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
       
       - name: 📤 Upload binary
         uses: actions/upload-artifact@v4
@@ -240,7 +255,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Verify package
         run: |
@@ -350,7 +365,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main  # Get latest with version bump
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
 
       - name: 📤 Publish to crates.io
         env:

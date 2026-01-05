@@ -82,10 +82,15 @@ jobs:
           Cflags: -I\${includedir}
           EOF
       
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       
-      - run: cargo build --no-default-features --features cli,tls-native --release
+      - name: Build
+        run: cargo build --no-default-features --features cli,tls-native --release
+        env:
+          LIBRARY_PATH: /usr/local/lib
+          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
       
       - uses: actions/upload-artifact@v4
         with:
