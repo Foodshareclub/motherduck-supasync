@@ -176,13 +176,17 @@ jobs:
           SYNC_EXIT=$?
           set -e
           
-          # Debug: show what we got (redacted)
+          # Debug: show what we got
           echo "=== Exit code: $SYNC_EXIT ==="
           echo "=== Stderr (first 5 lines, redacted): ==="
           head -5 sync-stderr.txt | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[host]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g' || true
           echo "=== Stdout size: $(wc -c < sync-stdout.txt) bytes ==="
+          echo "=== Stdout first 500 chars (redacted): ==="
+          head -c 500 sync-stdout.txt | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/"source_table": "[^"]*"/"source_table": "[redacted]"/g; s/"target_table": "[^"]*"/"target_table": "[redacted]"/g'
+          echo ""
+          echo "=== End of preview ==="
           
-          # The JSON output is pretty-printed, so we need the whole file, not just last line
+          # The JSON output is pretty-printed, so we need the whole file
           cp sync-stdout.txt sync-result-raw.json
           
           # Process and redact the JSON output
@@ -201,13 +205,22 @@ jobs:
               # Find JSON object in output (skip any log lines before JSON)
               start = content.find('{')
               if start < 0:
-                  print(f"⚠ No JSON found in output (first 200 chars): {content[:200]}")
+                  print(f"⚠ No JSON object found in output")
                   with open('sync-result.json', 'w') as f:
                       f.write('{"error": "no json in output", "success": false, "tables": {}}')
                   sys.exit(0)
               
-              content = content[start:]
-              data = json.loads(content)
+              json_content = content[start:]
+              
+              # Try to parse - if it fails, show where
+              try:
+                  data = json.loads(json_content)
+              except json.JSONDecodeError as e:
+                  print(f"⚠ JSON parse error at position {e.pos}: {e.msg}")
+                  print(f"   Context: ...{json_content[max(0,e.pos-50):e.pos+50]}...")
+                  with open('sync-result.json', 'w') as f:
+                      f.write('{"error": "json parse error", "success": false, "tables": {}}')
+                  sys.exit(0)
               # Redact table names
               if 'tables' in data:
                   redacted = {}
