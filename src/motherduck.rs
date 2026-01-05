@@ -116,6 +116,34 @@ impl MotherDuckClient {
                 updated_at TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS full_rooms (
+                id VARCHAR PRIMARY KEY,
+                post_id INTEGER,
+                sharer_id VARCHAR,
+                requester_id VARCHAR,
+                status VARCHAR,
+                last_message_at TIMESTAMP,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS full_reviews (
+                id VARCHAR PRIMARY KEY,
+                reviewer_id VARCHAR,
+                post_id INTEGER,
+                rating INTEGER,
+                review_type VARCHAR,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS full_favorites (
+                id VARCHAR PRIMARY KEY,
+                user_id VARCHAR,
+                post_id INTEGER,
+                created_at TIMESTAMP
+            );
+
             -- Events table for tracking
             CREATE TABLE IF NOT EXISTS events (
                 id VARCHAR PRIMARY KEY,
