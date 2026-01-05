@@ -1894,8 +1894,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "motherduck-sync"
-version = "1.0.4"
+name = "motherduck-supasync"
+version = "1.0.5"
 dependencies = [
  "assert_cmd",
  "backoff",
