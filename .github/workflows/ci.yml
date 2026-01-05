@@ -238,11 +238,13 @@ jobs:
           [ $FOUND -eq 0 ] && echo "✅ No secrets found" || { echo "❌ Secrets detected!"; exit 1; }
 
   # ═══════════════════════════════════════════════════════════════
-  # STAGE 3: Package - Verify publishable (uses bundled for crates.io)
+  # STAGE 3: Package - Verify publishable (only on release)
+  # Skipped on regular commits to save ~8min build time
   # ═══════════════════════════════════════════════════════════════
   package:
     name: 📦 Package
-    needs: quality
+    needs: [gate, quality]
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -259,8 +261,8 @@ jobs:
   # ═══════════════════════════════════════════════════════════════
   release:
     name: 🏷️ Release
-    needs: [gate, security, package]
-    if: needs.gate.outputs.should_release == 'true'
+    needs: [gate, quality, security, package]
+    if: needs.gate.outputs.should_release == 'true' && !failure() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
