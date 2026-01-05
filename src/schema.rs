@@ -1,4 +1,4 @@
-//! Schema types and DDL generation for motherduck-sync.
+//! Schema types and DDL generation for motherduck-supasync.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

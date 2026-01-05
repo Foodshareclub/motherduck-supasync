@@ -1,4 +1,4 @@
-//! MotherDuck client and operations for motherduck-sync.
+//! MotherDuck client and operations for motherduck-supasync.
 
 use crate::config::{MotherDuckConfig, TableMapping};
 use crate::error::{Error, Result};

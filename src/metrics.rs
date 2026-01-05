@@ -1,4 +1,4 @@
-//! Metrics and observability for motherduck-sync.
+//! Metrics and observability for motherduck-supasync.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

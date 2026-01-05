@@ -1,4 +1,4 @@
-//! Configuration types and builders for motherduck-sync.
+//! Configuration types and builders for motherduck-supasync.
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};

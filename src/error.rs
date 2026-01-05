@@ -1,11 +1,11 @@
-//! Error types for motherduck-sync.
+//! Error types for motherduck-supasync.
 
 use thiserror::Error;
 
 /// Result type alias using the library's Error type.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Main error type for motherduck-sync operations.
+/// Main error type for motherduck-supasync operations.
 #[derive(Error, Debug)]
 pub enum Error {
     /// Configuration error

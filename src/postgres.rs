@@ -1,4 +1,4 @@
-//! PostgreSQL client and operations for motherduck-sync.
+//! PostgreSQL client and operations for motherduck-supasync.
 
 use crate::config::{PostgresConfig, TableMapping};
 use crate::error::{Error, Result};

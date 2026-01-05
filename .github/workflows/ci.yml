@@ -192,7 +192,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ github.sha }}
-          path: target/release/motherduck-sync
+          path: target/release/motherduck-supasync
           retention-days: 7
 
   # ═══════════════════════════════════════════════════════════════
@@ -378,7 +378,7 @@ jobs:
           if echo "$OUTPUT" | grep -q "already uploaded"; then
             echo "✅ Version already published"
           elif echo "$OUTPUT" | grep -q "Uploading"; then
-            echo "✅ Published: https://crates.io/crates/motherduck-sync"
+            echo "✅ Published: https://crates.io/crates/motherduck-supasync"
           else
             echo "❌ Publish failed"
             exit 1

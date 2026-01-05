@@ -1,13 +1,13 @@
 //! MotherDuck Sync CLI
 
 use clap::{Parser, Subcommand};
-use motherduck_sync::{SyncClient, SyncConfig, SyncMode};
+use motherduck_supasync::{SyncClient, SyncConfig, SyncMode};
 use std::process::ExitCode;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser)]
-#[command(name = "motherduck-sync")]
+#[command(name = "motherduck-supasync")]
 #[command(author, version, about = "Sync data from PostgreSQL to MotherDuck")]
 struct Cli {
     #[command(subcommand)]
@@ -44,7 +44,7 @@ enum Commands {
     Status,
     /// Generate sample config
     Init {
-        #[arg(short, long, default_value = "motherduck-sync.toml")]
+        #[arg(short, long, default_value = "motherduck-supasync.toml")]
         output: String,
     },
     /// Query MotherDuck tables
@@ -131,7 +131,7 @@ fn load_config(path: Option<&str>) -> Result<SyncConfig, Box<dyn std::error::Err
         return Ok(SyncConfig::from_file(p)?);
     }
 
-    for default in &["motherduck-sync.toml", ".motherduck-sync.toml"] {
+    for default in &["motherduck-supasync.toml", ".motherduck-supasync.toml"] {
         if std::path::Path::new(default).exists() {
             info!("Loading config from: {}", default);
             return Ok(SyncConfig::from_file(default)?);
@@ -155,7 +155,7 @@ async fn run_sync(
     };
 
     if !quiet && !json {
-        println!("MotherDuck Sync v{}", motherduck_sync::VERSION);
+        println!("MotherDuck Sync v{}", motherduck_supasync::VERSION);
         println!("Mode: {}\n", mode);
     }
 
@@ -232,7 +232,7 @@ async fn run_query(
     tables: bool,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use motherduck_sync::MotherDuckClient;
+    use motherduck_supasync::MotherDuckClient;
 
     let md_client = MotherDuckClient::connect(config.motherduck)?;
 
@@ -380,9 +380,9 @@ async fn run_query(
     // Default: show help
     println!("Query MotherDuck tables\n");
     println!("Usage:");
-    println!("  motherduck-sync query --tables      # List all tables");
-    println!("  motherduck-sync query --counts      # Show row counts");
-    println!("  motherduck-sync query --sql \"SELECT * FROM daily_stats LIMIT 5\"");
+    println!("  motherduck-supasync query --tables      # List all tables");
+    println!("  motherduck-supasync query --counts      # Show row counts");
+    println!("  motherduck-supasync query --sql \"SELECT * FROM daily_stats LIMIT 5\"");
     Ok(())
 }
 
@@ -394,7 +394,7 @@ async fn run_clean(
     json: bool,
     quiet: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use motherduck_sync::MotherDuckClient;
+    use motherduck_supasync::MotherDuckClient;
 
     let md_client = MotherDuckClient::connect(config.motherduck)?;
     let target_tables = [
@@ -419,11 +419,11 @@ async fn run_clean(
             println!("Clean MotherDuck tables\n");
             println!("Usage:");
             println!(
-                "  motherduck-sync clean --truncate           # Clear all data, keep structure"
+                "  motherduck-supasync clean --truncate           # Clear all data, keep structure"
             );
-            println!("  motherduck-sync clean --reset              # Drop and recreate tables");
+            println!("  motherduck-supasync clean --reset              # Drop and recreate tables");
             println!(
-                "  motherduck-sync clean --truncate -t daily_stats  # Truncate specific table"
+                "  motherduck-supasync clean --truncate -t daily_stats  # Truncate specific table"
             );
             return Ok(());
         }

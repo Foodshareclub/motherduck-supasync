@@ -15,7 +15,7 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use motherduck_sync::{SyncClient, SyncConfig, SyncMode};
+//! use motherduck_supasync::{SyncClient, SyncConfig, SyncMode};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,7 @@
 //! You can define custom table mappings:
 //!
 //! ```rust,no_run
-//! use motherduck_sync::{SyncClient, SyncConfig, TableMapping};
+//! use motherduck_supasync::{SyncClient, SyncConfig, TableMapping};
 //!
 //! let mapping = TableMapping::builder()
 //!     .source_table("my_source_table")

@@ -1,23 +1,23 @@
 [package]
-name = "motherduck-sync"
-version = "1.0.4"
+name = "motherduck-supasync"
+version = "0.1.0"
 edition = "2024"
 authors = ["Foodshare <dev@foodshare.club>"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/Foodshareclub/motherduck-sync"
-documentation = "https://docs.rs/motherduck-sync"
+repository = "https://github.com/Foodshareclub/motherduck-supasync"
+documentation = "https://docs.rs/motherduck-supasync"
 readme = "README.md"
 keywords = ["duckdb", "motherduck", "supabase", "sync", "analytics"]
 categories = ["command-line-utilities", "database"]
 rust-version = "1.85"
-description = "A Rust CLI for syncing PostgreSQL or Supabase data to MotherDuck for analytics"
+description = "A Rust CLI for syncing Supabase PostgreSQL data to MotherDuck for analytics"
 
 [lib]
-name = "motherduck_sync"
+name = "motherduck_supasync"
 path = "src/lib.rs"
 
 [[bin]]
-name = "motherduck-sync"
+name = "motherduck-supasync"
 path = "src/bin/main.rs"
 
 [features]

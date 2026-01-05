@@ -27,7 +27,7 @@ on:
         default: false
 
 concurrency:
-  group: motherduck-sync-${{ github.ref }}
+  group: motherduck-supasync-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -94,8 +94,8 @@ jobs:
       
       - uses: actions/upload-artifact@v4
         with:
-          name: motherduck-sync-${{ github.sha }}
-          path: target/release/motherduck-sync
+          name: motherduck-supasync-${{ github.sha }}
+          path: target/release/motherduck-supasync
           retention-days: 7
 
   sync:
@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: motherduck-sync-${{ github.sha }}
+          name: motherduck-supasync-${{ github.sha }}
       
       - name: 🦆 Install DuckDB library
         run: |
@@ -121,7 +121,7 @@ jobs:
           sudo ldconfig
           echo "✅ DuckDB ${DUCKDB_VERSION} runtime installed"
       
-      - run: chmod +x motherduck-sync
+      - run: chmod +x motherduck-supasync
       
       - name: Validate config
         run: |
@@ -165,7 +165,7 @@ jobs:
       - name: Test connectivity
         run: |
           # Use Rust CLI to test connectivity (redact output)
-          LOG_LEVEL=debug ./motherduck-sync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g; s/[a-z_]*staging[a-z_]*/[table]/g' | head -20 || exit 1
+          LOG_LEVEL=debug ./motherduck-supasync test 2>&1 | sed 's/[a-z0-9-]*\.pooler\.supabase\.com/[db-host]/g; s/:[0-9]*\/[a-z]*/:***\/[db]/g; s/postgres:\/\/[^@]*@/postgres:\/\/***@/g; s/[a-z_]*staging[a-z_]*/[table]/g' | head -20 || exit 1
           echo "✓ Connectivity OK"
 
       - name: Refresh staging
@@ -180,7 +180,7 @@ jobs:
           
           # Run sync with JSON output, capture separately
           set +e
-          ./motherduck-sync $ARGS --json > sync-stdout.txt 2> sync-stderr.txt
+          ./motherduck-supasync $ARGS --json > sync-stdout.txt 2> sync-stderr.txt
           SYNC_EXIT=$?
           set -e
           
@@ -215,7 +215,7 @@ jobs:
       - name: Verify
         run: |
           # Use Rust CLI to verify counts (redact table names)
-          ./motherduck-sync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/[a-z_]*_stats/[table]/g' | grep -E "(Total|records|→)" || echo "✓ Verify complete"
+          ./motherduck-supasync query --counts 2>&1 | sed 's/[a-z_]*staging[a-z_]*/[table]/g; s/full_[a-z_]*/[table]/g; s/[a-z_]*_stats/[table]/g' | grep -E "(Total|records|→)" || echo "✓ Verify complete"
 
       - uses: actions/upload-artifact@v4
         if: always()

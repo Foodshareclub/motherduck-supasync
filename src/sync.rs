@@ -1,4 +1,4 @@
-//! Core sync logic for motherduck-sync.
+//! Core sync logic for motherduck-supasync.
 
 use crate::config::{SyncConfig, TableMapping};
 use crate::error::Result;

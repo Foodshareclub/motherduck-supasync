@@ -1,4 +1,4 @@
-//! Benchmarks for motherduck-sync operations.
+//! Benchmarks for motherduck-supasync operations.
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde_json::Value as JsonValue;

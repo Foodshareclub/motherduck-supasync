@@ -6,7 +6,7 @@ A Rust CLI for syncing PostgreSQL data to [MotherDuck](https://motherduck.com/) 
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 
 ```
-PostgreSQL/Supabase  →  motherduck-sync  →  MotherDuck (DuckDB)
+PostgreSQL/Supabase  →  motherduck-supasync  →  MotherDuck (DuckDB)
 ```
 
 ## Features
@@ -29,7 +29,7 @@ export MOTHERDUCK_TOKEN="your_token"
 export SYNC_TABLES_JSON='[{"source":"users","target":"users","pk":["id"]}]'
 
 # Sync
-motherduck-sync sync
+motherduck-supasync sync
 ```
 
 ## Documentation
@@ -66,7 +66,7 @@ cp tables.example.json tables.local.json
 ### 2. Generate Secret
 
 ```bash
-motherduck-sync generate-secret --input tables.local.json
+motherduck-supasync generate-secret --input tables.local.json
 ```
 
 ### 3. Set GitHub Secrets
@@ -80,12 +80,12 @@ motherduck-sync generate-secret --input tables.local.json
 ## Commands
 
 ```bash
-motherduck-sync sync              # Incremental sync
-motherduck-sync sync --full       # Full resync
-motherduck-sync test              # Test connectivity
-motherduck-sync status            # Show unsynced counts
-motherduck-sync query --counts    # Query MotherDuck
-motherduck-sync generate-secret   # Generate config secret
+motherduck-supasync sync              # Incremental sync
+motherduck-supasync sync --full       # Full resync
+motherduck-supasync test              # Test connectivity
+motherduck-supasync status            # Show unsynced counts
+motherduck-supasync query --counts    # Query MotherDuck
+motherduck-supasync generate-secret   # Generate config secret
 ```
 
 ## Table Config Fields
@@ -105,7 +105,7 @@ motherduck-sync generate-secret   # Generate config secret
 
 ```
 ┌──────────────┐     ┌─────────────────┐     ┌─────────────┐
-│  PostgreSQL  │────▶│ motherduck-sync │────▶│ MotherDuck  │
+│  PostgreSQL  │────▶│ motherduck-supasync │────▶│ MotherDuck  │
 └──────────────┘     └─────────────────┘     └─────────────┘
        │                     │
        └─────────────────────┘
