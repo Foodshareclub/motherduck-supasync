@@ -262,18 +262,21 @@ jobs:
           echo "║         📦 Package Verification                  ║"
           echo "╚══════════════════════════════════════════════════╝"
           
-          # List package contents
+          # Pre-fetch crates.io index to update Cargo.lock before packaging
+          echo "📥 Updating crates.io index..."
+          cargo fetch --locked 2>/dev/null || cargo fetch
+          
+          # List package contents (--allow-dirty in case Cargo.lock changed)
+          echo ""
           echo "📋 Package contents:"
-          cargo package --list
+          cargo package --list --allow-dirty
           
           # Verify package builds (uses bundled DuckDB - takes ~8min first time)
           echo ""
           echo "🔨 Building package (bundled DuckDB)..."
           cargo publish --dry-run --allow-dirty 2>&1 || {
-            echo "⚠️ Dry-run failed, checking if it's a known issue..."
-            # Allow failure if crate already exists (name conflict check)
+            echo "⚠️ Dry-run failed, trying cargo package..."
             cargo package --allow-dirty
-            echo "✅ Package created successfully"
           }
           
           echo ""
